@@ -1,0 +1,25 @@
+{
+  "name": "OM Saravana Cranes - Business Manager",
+  "short_name": "OM Saravana",
+  "description": "Quotation, Tax Invoice, Proforma Invoice & Customer Management for OM Saravana Cranes",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0f1117",
+  "theme_color": "#c8952e",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"]
+}
