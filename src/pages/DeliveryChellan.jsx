@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, getNextDcNumber, updateDcCounter, initSettings, saveDc, deleteDc } from '../db';
+import { COMPANY, getNextDcNumber, updateDcCounter, initSettings, saveDc, deleteDc, getAllVehicleSections } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 
@@ -10,6 +10,13 @@ export default function DeliveryChellan() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
   const [savedDcs, setSavedDcs] = useState([]);
+  const [vehicleSections, setVehicleSections] = useState([]); // all sections from Vehicle Details
+
+  // Autocomplete states
+  const [transportSuggestions, setTransportSuggestions] = useState([]);
+  const [showTransportDropdown, setShowTransportDropdown] = useState(false);
+  const [itemSuggestions, setItemSuggestions] = useState([]); // { label, capacity, chassisNo, value }
+  const [activeItemDropdown, setActiveItemDropdown] = useState(null); // row index
 
   const [form, setForm] = useState({
     docName: '',
@@ -29,8 +36,103 @@ export default function DeliveryChellan() {
   const [signature, setSignature] = useState(null);
 
   const fetchSaved = async () => {
+    const { db } = await import('../db');
     const data = await db.deliveryChellans.toArray();
     setSavedDcs(data.reverse());
+  };
+
+  // ── Load vehicle sections ─────────────────────────────────────
+  const loadVehicleSections = async () => {
+    const sections = await getAllVehicleSections();
+    setVehicleSections(sections);
+  };
+
+  // ── Transport reg no suggestions (from TRANSPORT section) ────
+  const getTransportSuggestions = (query = '') => {
+    const transportSection = vehicleSections.find(
+      s => s.sectionName.toUpperCase() === 'TRANSPORT'
+    );
+    if (!transportSection) return [];
+    const q = query.toLowerCase();
+    return (transportSection.vehicles || []).filter(
+      v => v.regNo && (!q || v.regNo.toLowerCase().includes(q))
+    );
+  };
+
+  const handleTransportRegNoChange = (value) => {
+    setForm(f => ({ ...f, transportRegNo: value }));
+    const suggestions = getTransportSuggestions(value);
+    setTransportSuggestions(suggestions);
+    setShowTransportDropdown(true);
+  };
+
+  const selectTransportSuggestion = (vehicle) => {
+    setForm(f => ({ ...f, transportRegNo: vehicle.regNo }));
+    setShowTransportDropdown(false);
+    setTransportSuggestions([]);
+  };
+
+  // ── Item/vehicle autocomplete (all sections except TRANSPORT) ─
+  const getItemSuggestions = (query = '') => {
+    const q = query.toLowerCase();
+    const results = [];
+    for (const section of vehicleSections) {
+      if (section.sectionName.toUpperCase() === 'TRANSPORT') continue;
+      const name = section.sectionName;
+      // Extract capacity from section name (e.g. "3 TON", "5 TON")
+      const tonMatch = name.match(/(\d+)\s*TON/i);
+      const capacity = tonMatch ? `${tonMatch[1]} Ton` : '';
+      
+      // Simplify the inserted type based on section name
+      let simpleType = name;
+      const nameLower = name.toLowerCase();
+      if (nameLower.includes('forklift')) simpleType = 'Forklift';
+      else if (nameLower.includes('crane')) simpleType = 'Crane';
+      else if (nameLower.includes('trailer')) simpleType = 'Trailer';
+      else if (nameLower.includes('truck')) simpleType = 'Truck';
+
+      for (const v of (section.vehicles || [])) {
+        const labelParts = [name, v.name].filter(Boolean);
+        const label = labelParts.join(' – ');
+        if (
+          !q ||
+          name.toLowerCase().includes(q) ||
+          (v.name && v.name.toLowerCase().includes(q)) ||
+          label.toLowerCase().includes(q)
+        ) {
+          results.push({
+            label,
+            typeDisplay: simpleType,    // shown as the "Type" cell
+            capacity,
+            chassisNo: v.chassisNo || '',
+            value: v.value || '',
+            regNo: v.regNo || ''
+          });
+        }
+      }
+    }
+    return results;
+  };
+
+  const handleItemTypeChange = (idx, value) => {
+    updateVehicle(idx, 'type', value);
+    const suggestions = getItemSuggestions(value);
+    setItemSuggestions(suggestions);
+    setActiveItemDropdown(idx);
+  };
+
+  const selectItemSuggestion = (idx, suggestion) => {
+    const newVehicles = [...form.vehicles];
+    newVehicles[idx] = {
+      ...newVehicles[idx],
+      type: suggestion.typeDisplay,
+      capacity: suggestion.capacity,
+      regNo: suggestion.chassisNo, // chassis no goes into the chassis column
+      value: suggestion.value
+    };
+    setForm(f => ({ ...f, vehicles: newVehicles }));
+    setActiveItemDropdown(null);
+    setItemSuggestions([]);
   };
 
   useEffect(() => {
@@ -41,6 +143,7 @@ export default function DeliveryChellan() {
       const formattedNum = `OSC${String(num).padStart(4, '0')}`;
       setForm(f => ({ ...f, dcNo: formattedNum }));
       await fetchSaved();
+      await loadVehicleSections();
 
       if (location.state?.loadItem) {
         const dc = location.state.loadItem;
@@ -271,10 +374,47 @@ export default function DeliveryChellan() {
 
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Transport Vehicle Info</div>
-              <div className="form-group mb-0">
+              <div className="form-group mb-0" style={{ position: 'relative' }}>
                 <label>Vehicle Responsible For Transportation (Registration Number)</label>
-                <input className="form-control" placeholder="e.g. TN 88 F 0907" style={{ marginBottom: 0 }}
-                  value={form.transportRegNo} onChange={e => setForm({ ...form, transportRegNo: e.target.value })} />
+                <input
+                  className="form-control"
+                  placeholder="e.g. TN 88 F 0907 – type to search from Transport section"
+                  style={{ marginBottom: 0 }}
+                  value={form.transportRegNo}
+                  onChange={e => handleTransportRegNoChange(e.target.value)}
+                  onBlur={() => setTimeout(() => setShowTransportDropdown(false), 150)}
+                  onFocus={() => {
+                    const s = getTransportSuggestions(form.transportRegNo);
+                    setTransportSuggestions(s);
+                    setShowTransportDropdown(true);
+                  }}
+                  autoComplete="off"
+                />
+                {showTransportDropdown && (
+                  <div style={{
+                    position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
+                    background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                    borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                    overflow: 'hidden', marginTop: '2px'
+                  }}>
+                    {transportSuggestions.map((v, i) => (
+                      <div
+                        key={i}
+                        onMouseDown={() => selectTransportSuggestion(v)}
+                        style={{
+                          padding: '10px 14px', cursor: 'pointer',
+                          borderBottom: '1px solid var(--border-color)',
+                          display: 'flex', flexDirection: 'column', gap: '2px'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>{v.regNo}</span>
+                        {v.name && <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{v.name}</span>}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
@@ -285,8 +425,8 @@ export default function DeliveryChellan() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th style={{ width: '130px' }}>Type</th>
-                      <th style={{ width: '130px' }}>Capacity/Ton</th>
+                      <th style={{ minWidth: '200px' }}>Type / Vehicle</th>
+                      <th style={{ width: '120px' }}>Capacity/Ton</th>
                       <th>Chassis Number</th>
                       <th>Value (in ₹)</th>
                       <th style={{ width: '40px' }}></th>
@@ -295,12 +435,49 @@ export default function DeliveryChellan() {
                   <tbody>
                     {form.vehicles.map((v, idx) => (
                       <tr key={idx}>
-                        <td>
-                          <input 
-                            list="vehicleTypes"
-                            className="form-control" 
-                            placeholder="e.g. Forklift, Crane"
-                            value={v.type} onChange={e => updateVehicle(idx, 'type', e.target.value)} />
+                        <td style={{ position: 'relative' }}>
+                          <input
+                            className="form-control"
+                            placeholder="Type to search (e.g. forklift, crane, tailift…)"
+                            value={v.type}
+                            onChange={e => handleItemTypeChange(idx, e.target.value)}
+                            onBlur={() => setTimeout(() => setActiveItemDropdown(null), 150)}
+                            onFocus={() => {
+                              const s = getItemSuggestions(v.type);
+                              setItemSuggestions(s);
+                              setActiveItemDropdown(idx);
+                            }}
+                            autoComplete="off"
+                          />
+                          {activeItemDropdown === idx && itemSuggestions.length > 0 && (
+                            <div style={{
+                              position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 1000,
+                              background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                              borderRadius: '8px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                              overflow: 'hidden', marginTop: '2px', minWidth: '280px'
+                            }}>
+                              {itemSuggestions.map((s, sIdx) => (
+                                <div
+                                  key={sIdx}
+                                  onMouseDown={() => selectItemSuggestion(idx, s)}
+                                  style={{
+                                    padding: '10px 14px', cursor: 'pointer',
+                                    borderBottom: '1px solid var(--border-color)',
+                                    display: 'flex', flexDirection: 'column', gap: '2px'
+                                  }}
+                                  onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-elevated)'}
+                                  onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                                >
+                                  <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.9rem' }}>{s.label}</span>
+                                  <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                    {s.capacity && `Capacity: ${s.capacity}`}
+                                    {s.chassisNo && ` · Chassis: ${s.chassisNo}`}
+                                    {s.value && ` · ₹${s.value}`}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td>
                           <input className="form-control" placeholder="e.g. 5 Ton"
@@ -322,13 +499,6 @@ export default function DeliveryChellan() {
                   </tbody>
                 </table>
               </div>
-
-              <datalist id="vehicleTypes">
-                <option value="Forklift" />
-                <option value="Crane" />
-                <option value="Trailer" />
-                <option value="Truck" />
-              </datalist>
 
               <button className="btn btn-sm btn-secondary" onClick={addVehicle}>
                 <Plus size={14} /> Add Transported Item

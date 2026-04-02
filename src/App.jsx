@@ -7,6 +7,7 @@ import CashBill from './pages/CashBill';
 import DeliveryChellan from './pages/DeliveryChellan';
 import Customers from './pages/Customers';
 import Storage from './pages/Storage';
+import VehicleDetails from './pages/VehicleDetails';
 import UpdatePrompt from './components/UpdatePrompt';
 import './index.css';
 
@@ -25,6 +26,7 @@ function App() {
           <Route path="/delivery-chellan" element={<DeliveryChellan />} />
           <Route path="/customers" element={<Customers />} />
           <Route path="/storage" element={<Storage />} />
+          <Route path="/vehicle-details" element={<VehicleDetails />} />
         </Routes>
       </main>
     </BrowserRouter>

@@ -38,6 +38,62 @@ db.version(5).stores({
   proformaInvoices: '++id, invoiceNo, docName, date, clientCompany, grandTotal, data'
 });
 
+db.version(6).stores({
+  customers: '++id, companyName, gstin, address, mobile, email, website',
+  settings: 'key',
+  invoices: '++id, invoiceNo, docName, date, clientCompany, grandTotal, data',
+  cashbills: '++id, billNo, docName, date, clientCompany, grandTotal, data',
+  deliveryChellans: '++id, dcNo, docName, date, clientCompany, data',
+  quotations: '++id, docName, date, clientCompany, data',
+  proformaInvoices: '++id, invoiceNo, docName, date, clientCompany, grandTotal, data',
+  vehicleDetails: '++id, sectionName, order'
+});
+
+const DEFAULT_VEHICLE_SECTIONS = [
+  {
+    sectionName: '3 TON FORKLIFT – BAOLI',
+    order: 1,
+    vehicles: [
+      { name: 'Baoli Unit 1', regNo: '', chassisNo: '', value: '' }
+    ]
+  },
+  {
+    sectionName: '3 TON FORKLIFT – TAILIFT',
+    order: 2,
+    vehicles: [
+      { name: 'Tailift Unit 1', regNo: '', chassisNo: '', value: '' }
+    ]
+  },
+  {
+    sectionName: '5 TON FORKLIFT',
+    order: 3,
+    vehicles: [
+      { name: 'Unit 1', regNo: '', chassisNo: '', value: '' }
+    ]
+  },
+  {
+    sectionName: 'NEW 5 TON FORKLIFT',
+    order: 4,
+    vehicles: [
+      { name: 'Unit 1', regNo: '', chassisNo: '', value: '' }
+    ]
+  },
+  {
+    sectionName: 'FARANA F-20 CRANE',
+    order: 5,
+    vehicles: [
+      { name: 'Unit 1', regNo: '', chassisNo: '', value: '' }
+    ]
+  },
+  {
+    sectionName: 'TRANSPORT',
+    order: 6,
+    vehicles: [
+      { name: 'Vehicle 1', regNo: '', chassisNo: '', value: '' }
+    ]
+  }
+];
+
 export async function initSettings() {
   const invoiceCounter = await db.settings.get('invoiceCounter');
   if (!invoiceCounter) {
@@ -50,6 +106,14 @@ export async function initSettings() {
   const dcCounter = await db.settings.get('dcCounter');
   if (!dcCounter) {
     await db.settings.put({ key: 'dcCounter', value: 1 });
+  }
+
+  // Seed default vehicle sections if none exist
+  const vehicleSectionCount = await db.vehicleDetails.count();
+  if (vehicleSectionCount === 0) {
+    for (const section of DEFAULT_VEHICLE_SECTIONS) {
+      await db.vehicleDetails.add(section);
+    }
   }
 }
 
@@ -152,6 +216,24 @@ export async function updateCashBill(id, data) {
 }
 export async function deleteCashBill(id) {
   return await db.cashbills.delete(id);
+}
+
+// Vehicle Details CRUD
+export async function getAllVehicleSections() {
+  const sections = await db.vehicleDetails.toArray();
+  return sections.sort((a, b) => (a.order || 0) - (b.order || 0));
+}
+
+export async function saveVehicleSection(sectionData) {
+  return await db.vehicleDetails.add(sectionData);
+}
+
+export async function updateVehicleSection(id, sectionData) {
+  return await db.vehicleDetails.update(id, sectionData);
+}
+
+export async function deleteVehicleSection(id) {
+  return await db.vehicleDetails.delete(id);
 }
 
 // Company info constant
