@@ -6,11 +6,15 @@ import ProformaInvoice from './pages/ProformaInvoice';
 import CashBill from './pages/CashBill';
 import DeliveryChellan from './pages/DeliveryChellan';
 import Customers from './pages/Customers';
+import Storage from './pages/Storage';
+import UpdatePrompt from './components/UpdatePrompt';
 import './index.css';
+
 
 function App() {
   return (
     <BrowserRouter>
+      <UpdatePrompt />
       <Sidebar />
       <main className="main-content">
         <Routes>
@@ -20,6 +24,7 @@ function App() {
           <Route path="/cash-bill" element={<CashBill />} />
           <Route path="/delivery-chellan" element={<DeliveryChellan />} />
           <Route path="/customers" element={<Customers />} />
+          <Route path="/storage" element={<Storage />} />
         </Routes>
       </main>
     </BrowserRouter>

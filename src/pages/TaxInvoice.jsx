@@ -1,22 +1,28 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { db, COMPANY, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveInvoice } from '../db';
+import { db, COMPANY, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveInvoice, deleteInvoice } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
-import { createWorker } from 'tesseract.js';
 
 export default function TaxInvoice() {
   const previewRef = useRef(null);
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
+  const [isDuplicate, setIsDuplicate] = useState(false);
+  const [savedInvoices, setSavedInvoices] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showNewCustomerPrompt, setShowNewCustomerPrompt] = useState(false);
 
   const [form, setForm] = useState({
+    docName: '',
     invoiceNo: '',
     date: new Date().toISOString().split('T')[0],
     hsnCode: '996719',
+    reference: '',
+    workOrderNo: '',
     billingCompany: '',
     billingGstin: '',
     billingAddress: '',
@@ -31,11 +37,6 @@ export default function TaxInvoice() {
 
   const [signature, setSignature] = useState(null);
   const [isFetchingInfo, setIsFetchingInfo] = useState(false);
-  const [captchaImg, setCaptchaImg] = useState(null);
-  const [captchaInput, setCaptchaInput] = useState('');
-  const [showCaptchaDialog, setShowCaptchaDialog] = useState(false);
-  const [pendingGstin, setPendingGstin] = useState('');
-  const [fetchSource, setFetchSource] = useState(''); // 'official' or 'express'
 
   const GST_STATE_CODES = {
     '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
@@ -49,120 +50,11 @@ export default function TaxInvoice() {
     '38': 'Ladakh'
   };
 
-  const loadCaptcha = async (source) => {
-    setIsFetchingInfo(true);
-    setFetchSource(source || 'official');
-    setCaptchaImg(null);
-    setCaptchaInput('');
-    try {
-      // Official portal captcha endpoint
-      const url = 'https://services.gst.gov.in/services/captcha';
-      
-      // Use proxy to get image data
-      // We add a timestamp to prevent caching and force a refresh
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url + '?t=' + Date.now())}`;
-      const res = await fetch(proxyUrl);
-      const data = await res.json();
-      
-      if (data.contents) {
-        let imgData = data.contents;
-        // Ensure it's a proper data URL for display and OCR
-        if (!imgData.startsWith('data:image')) {
-          imgData = `data:image/png;base64,${imgData}`;
-        }
-        setCaptchaImg(imgData); 
-        setShowCaptchaDialog(true);
-        
-        // AUTO-SOLVE with Tesseract.js
-        try {
-          const worker = await createWorker('eng');
-          const { data: { text } } = await worker.recognize(imgData);
-          await worker.terminate();
-          // GST captchas are usually 6 digits or chars
-          const cleanText = text.replace(/[^a-zA-Z0-9]/g, '').substring(0, 6);
-          if (cleanText.length >= 4) {
-             setCaptchaInput(cleanText);
-          }
-        } catch (ocrErr) {
-          console.warn('OCR Auto-solve failed:', ocrErr);
-        }
-      } else {
-        throw new Error('Captcha content missing from response.');
-      }
-    } catch (err) {
-      console.error('Captcha Load Error:', err);
-      alert('Failed to load CAPTCHA image. Please try the "Search" buttons above or try again in a moment.');
-    }
-    setIsFetchingInfo(false);
-  };
-
-  const handlePortalFetch = async () => {
-    if (!pendingGstin || !captchaInput) return;
-    setIsFetchingInfo(true);
-    setShowCaptchaDialog(false);
-    
-    try {
-      // Primary source: Jamku API via proxy
-      const jamkuUrl = `https://gst.jamku.app/api/gstin/${pendingGstin}`;
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(jamkuUrl)}`;
-      
-      const res = await fetch(proxyUrl);
-      const proxyData = await res.json();
-      
-      if (proxyData.contents) {
-        const result = JSON.parse(proxyData.contents);
-        if (result.success && result.data) {
-          const d = result.data;
-          
-          // PERFECT MAPPING:
-          // Business Name: prioritized Trade Name, falls back to Legal Name
-          const businessName = d.tradeName || d.lgnm || '';
-          
-          // Address: Use the pre-joined 'adr' field if available, otherwise join parts
-          let fullAddress = d.adr || '';
-          if (!fullAddress && d.pradr?.addr) {
-            const a = d.pradr.addr;
-            fullAddress = [a.bnm, a.flno, a.st, a.loc, a.city, a.dst, a.stcd, a.pncd].filter(Boolean).join(', ');
-          }
-
-          // AUTO GST-TYPE DETECTION:
-          // Company state code is 33 (Tamil Nadu).
-          // If fetched GSTIN starts with 33, it's local (CGST+SGST). 
-          // Otherwise, it's interstate (IGST).
-          const stateCode = pendingGstin.substring(0, 2);
-          const autoGstType = stateCode === COMPANY.gstin.substring(0, 2) ? 'cgst_sgst' : 'igst';
-
-          setForm(f => ({
-            ...f,
-            billingCompany: businessName,
-            billingAddress: fullAddress,
-            billingGstin: pendingGstin.toUpperCase(),
-            gstType: autoGstType
-          }));
-          
-          alert(`Success! Found "${businessName}" (${autoGstType === 'igst' ? 'Interstate - IGST 18%' : 'Intrastate - CGST+SGST 18%'})`);
-        } else {
-          alert('GSTIN found but no details available. Please check the number.');
-        }
-      } else {
-        alert('Could not reach the database. Please check your internet connection.');
-      }
-    } catch (err) {
-      console.error('Portal Fetch Error:', err);
-      alert('Network error while fetching details. Please try again.');
-    }
-    
-    setIsFetchingInfo(false);
-    setCaptchaInput('');
-    setCaptchaImg(null);
-    setPendingGstin('');
-  };
-
-  // Modern internet fetch implementation for auto-fill
+  // Modern fetch implementation for auto-fill based on local database ONLY to preserve explicit user entry
   const handleInternetFetch = async (query, type) => {
     if (!query || query.length < 3) return;
     
-    // 1. First search in local DB
+    // First search in local DB
     const allCustomers = await db.customers.toArray();
     const localMatch = type === 'gstin' 
       ? allCustomers.find(c => c.gstin.toUpperCase() === query.toUpperCase())
@@ -176,54 +68,22 @@ export default function TaxInvoice() {
         billingAddress: localMatch.address,
         billingMobile: localMatch.mobile || '',
         billingWebsite: localMatch.website || '',
+        gstType: localMatch.gstin?.startsWith(COMPANY.gstin.substring(0, 2)) ? 'cgst_sgst' : 'igst'
       }));
       return;
     }
 
-    if (type === 'gstin' && query.length === 15) {
-      setPendingGstin(query);
-      loadCaptcha('official');
-      return;
+    // Auto detect GST-TYPE cleanly if they manually enter an accurate GSTIN
+    if (type === 'gstin' && query.length >= 2) {
+      const stateCode = query.substring(0, 2);
+      const autoGstType = stateCode === COMPANY.gstin.substring(0, 2) ? 'cgst_sgst' : 'igst';
+      setForm(f => ({ ...f, gstType: autoGstType }));
     }
+  };
 
-    setIsFetchingInfo(true);
-    try {
-      if (type === 'company') {
-        const [clearbitRes, locationRes] = await Promise.all([
-          fetch(`https://autocomplete.clearbit.com/v1/companies/suggest?query=${encodeURIComponent(query)}`).catch(() => null),
-          fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query + ', India')}&format=json&limit=1`).catch(() => null)
-        ]);
-        
-        let newName = f => f.billingCompany;
-        let newWeb = f => f.billingWebsite;
-        let newAddress = f => f.billingAddress;
-
-        if (clearbitRes && clearbitRes.ok) {
-          const cbData = await clearbitRes.json();
-          if (cbData && cbData.length > 0) {
-            newName = f => f.billingCompany === query ? cbData[0].name : f.billingCompany;
-            newWeb = f => f.billingWebsite || cbData[0].domain;
-          }
-        }
-        
-        if (locationRes && locationRes.ok) {
-          const locData = await locationRes.json();
-          if (locData && locData.length > 0) {
-            newAddress = f => f.billingAddress || locData[0].display_name;
-          }
-        }
-        
-        setForm(f => ({
-          ...f,
-          billingCompany: newName(f) || f.billingCompany,
-          billingWebsite: newWeb(f) || f.billingWebsite,
-          billingAddress: newAddress(f) || f.billingAddress
-        }));
-      }
-    } catch (err) {
-      console.error('Fetch Error:', err);
-    }
-    setIsFetchingInfo(false);
+  const fetchSaved = async () => {
+    const data = await db.invoices.toArray();
+    setSavedInvoices(data.reverse());
   };
 
   useEffect(() => {
@@ -233,9 +93,32 @@ export default function TaxInvoice() {
       setForm(f => ({ ...f, invoiceNo: num }));
       const allCustomers = await db.customers.toArray();
       setCustomers(allCustomers);
+      await fetchSaved();
+
+      if (location.state?.loadItem) {
+        const inv = location.state.loadItem;
+        setForm({ ...inv.data.form, id: inv.id });
+        setItems(inv.data.items);
+        if (inv.data.signature) setSignature(inv.data.signature);
+        setActiveTab('preview');
+      }
     };
     init();
-  }, []);
+  }, [location.state]);
+
+  const loadInvoice = (inv) => {
+    setForm({ ...inv.data.form, id: inv.id });
+    setItems(inv.data.items);
+    if (inv.data.signature) setSignature(inv.data.signature);
+    setActiveTab('preview');
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this invoice from storage?')) {
+      await deleteInvoice(id);
+      await fetchSaved();
+    }
+  };
 
   const handleCompanySearch = (val) => {
     setForm({ ...form, billingCompany: val });
@@ -345,21 +228,49 @@ export default function TaxInvoice() {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
+  const handleSaveOnly = async () => {
+    const invoiceData = {
+      invoiceNo: form.invoiceNo,
+      docName: form.docName || `Tax Invoice ${form.invoiceNo}`,
+      date: form.date,
+      clientCompany: form.billingCompany,
+      grandTotal: grandTotal,
+      data: { form, items, signature }
+    };
+    if (form.id) {
+      await updateInvoice(form.id, invoiceData);
+      alert('Document updated successfully!');
+    } else {
+      const newId = await saveInvoice(invoiceData);
+      setForm(f => ({ ...f, id: newId }));
+      alert('Document saved to database successfully!');
+    }
+    await fetchSaved();
+  };
+
   const handleExport = async () => {
     // Save to DB
     const invoiceData = {
       invoiceNo: form.invoiceNo,
+      docName: form.docName || `Tax Invoice ${form.invoiceNo}`,
       date: form.date,
       clientCompany: form.billingCompany,
       grandTotal: grandTotal,
-      data: { form, items }
+      data: { form, items, signature }
     };
-    await saveInvoice(invoiceData);
+    
+    if (form.id) {
+      await updateInvoice(form.id, invoiceData);
+    } else {
+      const newId = await saveInvoice(invoiceData);
+      setForm(f => ({ ...f, id: newId }));
+    }
+    await fetchSaved();
     
     // Auto-increment the invoice number from the CURRENT entered one
     await updateInvoiceCounter(form.invoiceNo);
     const nextNum = await getNextInvoiceNumber();
-    setForm(f => ({ ...f, invoiceNo: nextNum }));
+    setForm(f => ({ ...f, invoiceNo: nextNum, id: undefined })); // Clear ID to allow new document
     alert('Invoice saved and number auto-incremented based on your entry!');
   };
 
@@ -380,14 +291,35 @@ export default function TaxInvoice() {
         <div className="tab-bar">
           <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Edit Form</button>
           <button className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>Preview</button>
+          <button className={`tab-btn ${activeTab === 'storage' ? 'active' : ''}`} onClick={() => setActiveTab('storage')}>Saved Docs</button>
         </div>
 
         <div className="doc-preview-wrapper">
           {/* === FORM === */}
-          <div className="doc-form-panel" style={{ display: activeTab === 'preview' ? 'none' : undefined }}>
+          <div className="doc-form-panel" style={{ display: activeTab === 'preview' || activeTab === 'storage' ? 'none' : undefined }}>
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Document Options</div>
+              <div className="form-group">
+                <label>Document Name (For Storage)</label>
+                <input className="form-control" placeholder="E.g. XYZ Corp March Invoice"
+                  value={form.docName} onChange={e => setForm({ ...form, docName: e.target.value })} />
+              </div>
+              <div className="card-title" style={{ marginTop: '16px' }}>Copy Type</div>
+              <div className="gst-selector">
+                <button className={`gst-option ${!isDuplicate ? 'active' : ''}`}
+                  onClick={() => setIsDuplicate(false)}>
+                  Original Copy
+                </button>
+                <button className={`gst-option ${isDuplicate ? 'active' : ''}`}
+                  onClick={() => setIsDuplicate(true)}>
+                  Duplicate Copy
+                </button>
+              </div>
+            </div>
+
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Invoice Details</div>
-              <div className="form-row form-row-3">
+              <div className="form-row form-row-2">
                 <div className="form-group">
                   <label>Invoice No.</label>
                   <input className="form-control" value={form.invoiceNo}
@@ -403,11 +335,21 @@ export default function TaxInvoice() {
                   <input className="form-control" value={form.hsnCode}
                     onChange={e => setForm({ ...form, hsnCode: e.target.value })} />
                 </div>
+                <div className="form-group">
+                  <label>Work Order No. (Optional)</label>
+                  <input className="form-control" value={form.workOrderNo}
+                    onChange={e => setForm({ ...form, workOrderNo: e.target.value })} />
+                </div>
               </div>
             </div>
 
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Billing To</div>
+              <div className="form-group">
+                <label>Reference (Optional)</label>
+                <input className="form-control" placeholder="e.g. Ref: Name"
+                  value={form.reference} onChange={e => setForm({ ...form, reference: e.target.value })} />
+              </div>
               <div className="form-group autocomplete-wrapper">
                 <label>Company Name</label>
                 <input className="form-control" placeholder="Start typing to search..."
@@ -553,7 +495,7 @@ export default function TaxInvoice() {
           </div>
 
           {/* === PREVIEW === */}
-          <div className="doc-preview-panel" style={{ display: activeTab === 'form' ? 'none' : undefined }}>
+          <div className="doc-preview-panel" style={{ display: activeTab !== 'preview' ? 'none' : undefined }}>
             <div className="doc-preview" ref={previewRef} style={{ width: '794px', maxWidth: '100%', margin: '4px auto', padding: '4px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
               <div className="doc-preview-inner">
                 {/* Header matching provided image */}
@@ -562,11 +504,12 @@ export default function TaxInvoice() {
                     <img src="/logo.png" alt="Logo" style={{ height: '70px', objectFit: 'contain', mixBlendMode: 'multiply' }} />
                   </div>
                   
-                  <div style={{ fontSize: '1.4rem', fontWeight: 'bold', letterSpacing: '1px' }}>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '1px' }}>
                     Tax Invoice
                   </div>
                   
-                  <div style={{ width: '220px', textAlign: 'right', fontSize: '0.9rem', fontWeight: 600, lineHeight: '1.6' }}>
+                  <div style={{ width: '220px', textAlign: 'right', fontSize: '1rem', fontWeight: 600, lineHeight: '1.6' }}>
+                    {isDuplicate && <div style={{ display: 'block', fontSize: '1.1rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '2px', color: '#444' }}>DUPLICATE COPY</div>}
                     <div style={{ display: 'block' }}>Date: {formatDate(form.date)}</div>
                     <div style={{ display: 'block', textTransform: 'uppercase' }}>INVOICE NO. {form.invoiceNo}</div>
                   </div>
@@ -577,38 +520,40 @@ export default function TaxInvoice() {
                   <tbody>
                     <tr>
                       <td style={{ width: '50%', verticalAlign: 'top', padding: '12px 12px 12px 0', borderRight: '1px solid #333' }}>
-                        <h4 style={{ fontSize: '0.9rem', marginBottom: '6px', fontWeight: 800, textTransform: 'uppercase' }}>{COMPANY.name}</h4>
-                        <div style={{ whiteSpace: 'pre-line', fontSize: '0.8rem', lineHeight: '1.5' }}>
+                        <h4 style={{ fontSize: '1rem', marginBottom: '6px', fontWeight: 800, textTransform: 'uppercase' }}>{COMPANY.name}</h4>
+                        <div style={{ whiteSpace: 'pre-line', fontSize: '0.9rem', lineHeight: '1.5' }}>
                           {COMPANY.address}
                         </div>
-                        <div style={{ fontSize: '0.8rem', marginTop: '4px' }}>GSTIN : {COMPANY.gstin}</div>
-                        <div style={{ fontSize: '0.8rem' }}>Mobile: {COMPANY.mobile}</div>
-                        <div style={{ fontSize: '0.8rem' }}>Email: {COMPANY.email}</div>
-                        <div style={{ fontSize: '0.8rem' }}>Website: {COMPANY.website}</div>
+                        <div style={{ fontSize: '0.9rem', marginTop: '4px' }}>GSTIN : {COMPANY.gstin}</div>
+                        <div style={{ fontSize: '0.9rem' }}>Mobile: {COMPANY.mobile}</div>
+                        <div style={{ fontSize: '0.9rem' }}>Email: {COMPANY.email}</div>
+                        <div style={{ fontSize: '0.9rem' }}>Website: {COMPANY.website}</div>
+                        {form.workOrderNo && <div style={{ fontSize: '0.9rem', marginTop: '4px', fontWeight: 600 }}>Work Order No: {form.workOrderNo}</div>}
                       </td>
                       <td style={{ width: '50%', verticalAlign: 'top', padding: '12px 0 12px 12px' }}>
-                        <h4 style={{ fontSize: '0.9rem', marginBottom: '6px', fontWeight: 800 }}>Billing To:</h4>
-                        <div style={{ fontWeight: 800, fontSize: '0.85rem', textTransform: 'uppercase' }}>{form.billingCompany || '—'}</div>
-                        <div style={{ whiteSpace: 'pre-line', fontSize: '0.8rem', marginTop: '4px', lineHeight: '1.5', textTransform: 'uppercase' }}>{form.billingAddress}</div>
-                        {form.billingGstin && <div style={{ fontSize: '0.8rem', marginTop: '4px', textTransform: 'uppercase' }}>GSTIN: {form.billingGstin}</div>}
-                        {form.billingMobile && <div style={{ fontSize: '0.8rem' }}>Mobile: {form.billingMobile}</div>}
+                        <h4 style={{ fontSize: '1rem', marginBottom: '6px', fontWeight: 800 }}>Billing To:</h4>
+                        {form.reference && <div style={{ fontSize: '0.95rem', marginBottom: '2px', fontWeight: 600 }}>Ref: {form.reference}</div>}
+                        <div style={{ fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase' }}>{form.billingCompany || '—'}</div>
+                        <div style={{ whiteSpace: 'pre-line', fontSize: '0.9rem', marginTop: '4px', lineHeight: '1.5', textTransform: 'uppercase' }}>{form.billingAddress}</div>
+                        {form.billingGstin && <div style={{ fontSize: '0.9rem', marginTop: '4px', textTransform: 'uppercase' }}>GSTIN: {form.billingGstin}</div>}
+                        {form.billingMobile && <div style={{ fontSize: '0.9rem' }}>Mobile: {form.billingMobile}</div>}
                       </td>
                     </tr>
                   </tbody>
                 </table>
 
                 {/* HSN Code */}
-                <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '8px' }}>
+                <div style={{ fontWeight: 700, fontSize: '0.92rem', marginBottom: '8px' }}>
                   HSN CODE: {form.hsnCode}
                 </div>
 
                 {/* Items Table */}
-                <table className="doc-table">
+                <table className="doc-table" style={{ fontSize: '0.92rem' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '40px' }}>S.NO</th>
-                      <th>DESCRIPTION</th>
-                      <th style={{ textAlign: 'right' }}>AMOUNT</th>
+                      <th style={{ width: '40px', fontSize: '0.88rem' }}>S.NO</th>
+                      <th style={{ fontSize: '0.88rem' }}>DESCRIPTION</th>
+                      <th style={{ textAlign: 'right', fontSize: '0.88rem' }}>AMOUNT</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -618,7 +563,7 @@ export default function TaxInvoice() {
                         <td>
                           {item.description || '—'}
                           {item.quantity && item.unitType ? (
-                            <div style={{ fontSize: '0.75rem', color: '#666', marginTop: '2px' }}>
+                            <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
                               {item.unitType === 'hours' ? `Over time - ${item.quantity} hours` : `${item.quantity} shift(s)`}
                               {item.rate && ` @ Rs. ${formatCurrency(item.rate)}`}
                             </div>
@@ -651,16 +596,16 @@ export default function TaxInvoice() {
                       </tr>
                     )}
                     <tr style={{ fontWeight: 800, background: '#f0f0f0' }}>
-                      <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px', fontSize: '0.9rem' }}>GRAND TOTAL</td>
-                      <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '0.9rem' }}><span>Rs.</span> <span>{formatCurrency(grandTotal)}</span></div></td>
+                      <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px', fontSize: '1rem' }}>GRAND TOTAL</td>
+                      <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '1rem' }}><span>Rs.</span> <span>{formatCurrency(grandTotal)}</span></div></td>
                     </tr>
                   </tbody>
                 </table>
 
                 {/* Payment & Signature */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', border: '1px solid #ccc', borderRadius: '4px', padding: '12px', marginTop: '16px', fontSize: '0.78rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', border: '1px solid #ccc', borderRadius: '4px', padding: '12px', marginTop: '16px', fontSize: '0.88rem' }}>
                   <div style={{ flex: '0 0 auto' }}>
-                    <h4 style={{ fontSize: '0.82rem', fontWeight: 700, marginBottom: '6px', textDecoration: 'underline' }}>PAYMENT INFORMATION</h4>
+                    <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '6px', textDecoration: 'underline' }}>PAYMENT INFORMATION</h4>
                     <p>Account No: {COMPANY.bankAccount}</p>
                     <p>Account Name: {COMPANY.bankName}</p>
                     <p>IFSC: {COMPANY.bankIFSC}</p>
@@ -670,7 +615,7 @@ export default function TaxInvoice() {
                     {signature && (
                       <>
                         <img src={signature} alt="Signature" className="signature-img" />
-                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
+                        <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
                       </>
                     )}
                   </div>
@@ -678,62 +623,54 @@ export default function TaxInvoice() {
               </div>
             </div>
 
-            <ExportButtons targetRef={previewRef} filename={`Tax_Invoice_${form.invoiceNo}`} onExport={handleExport} />
+            <ExportButtons targetRef={previewRef} filename={form.docName || `Tax_Invoice_${form.invoiceNo}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
           </div>
+
+          {/* === STORAGE === */}
+          {activeTab === 'storage' && (
+            <div className="doc-storage-panel fade-in">
+              <div className="card">
+                <div className="card-title">Saved Tax Invoices</div>
+                <div className="table-wrapper">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Doc Name</th>
+                        <th>Invoice No</th>
+                        <th>Client</th>
+                        <th>Amount</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedInvoices.map(inv => (
+                        <tr key={inv.id}>
+                          <td>{formatDate(inv.date)}</td>
+                          <td><strong>{inv.docName}</strong></td>
+                          <td>{inv.invoiceNo}</td>
+                          <td>{inv.clientCompany}</td>
+                          <td>₹{formatCurrency(inv.grandTotal)}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button className="btn btn-sm btn-secondary" onClick={() => loadInvoice(inv)}>Edit / View</button>
+                              <button className="btn btn-sm btn-danger" onClick={() => handleDelete(inv.id)}><Trash2 size={14}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {savedInvoices.length === 0 && (
+                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '24px' }}>No saved invoices found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-      {showCaptchaDialog && (
-        <div className="modal-overlay">
-          <div className="card modal-content" style={{ maxWidth: '300px', width: '90%', textAlign: 'center', padding: '24px' }}>
-            <div className="card-title" style={{ marginBottom: '4px' }}>Verify Identity</div>
-            <p style={{ fontSize: '0.75rem', color: '#666', marginBottom: '16px' }}>
-              Solving CAPTCHA for official lookup
-            </p>
-            
-            <div style={{ position: 'relative', background: '#f8f9fa', padding: '12px', borderRadius: '8px', marginBottom: '16px', border: '1px solid #eee', minHeight: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              {captchaImg ? (
-                <>
-                  <img src={captchaImg} alt="Captcha" style={{ maxWidth: '100%', height: '40px', borderRadius: '4px' }} />
-                  <button 
-                    onClick={() => loadCaptcha(fetchSource)}
-                    title="Refresh CAPTCHA"
-                    style={{ position: 'absolute', right: '4px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', opacity: 0.6 }}
-                  >
-                    🔄
-                  </button>
-                </>
-              ) : (
-                <div className="spinner-small" style={{ border: '2px solid #f3f3f3', borderTop: '2px solid #0066cc', borderRadius: '50%', width: '20px', height: '20px', animation: 'spin 1s linear infinite' }}></div>
-              )}
-            </div>
 
-            <div className="form-group" style={{ marginBottom: '20px' }}>
-              <input 
-                className="form-control" 
-                placeholder="6-character code"
-                style={{ textAlign: 'center', fontSize: '1.4rem', letterSpacing: '4px', fontWeight: 'bold', textTransform: 'uppercase', height: '50px' }}
-                value={captchaInput}
-                onChange={e => setCaptchaInput(e.target.value.toUpperCase())}
-                maxLength={8}
-                autoFocus
-              />
-              <div style={{ fontSize: '0.65rem', color: '#888', marginTop: '4px' }}>AI has auto-filled the code above. Edit if needed.</div>
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <button className="btn btn-secondary" style={{ flex: 1, padding: '10px' }} 
-                onClick={() => { setShowCaptchaDialog(false); setPendingGstin(''); }}>
-                Cancel
-              </button>
-              <button className="btn btn-primary" style={{ flex: 1, padding: '10px' }} 
-                onClick={handlePortalFetch} 
-                disabled={!captchaInput || isFetchingInfo}>
-                {isFetchingInfo ? 'Verifying...' : 'Submit'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       <style>{`
         .modal-overlay {

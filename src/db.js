@@ -28,6 +28,16 @@ db.version(4).stores({
   deliveryChellans: '++id, dcNo, date, clientCompany, data'
 });
 
+db.version(5).stores({
+  customers: '++id, companyName, gstin, address, mobile, email, website',
+  settings: 'key',
+  invoices: '++id, invoiceNo, docName, date, clientCompany, grandTotal, data',
+  cashbills: '++id, billNo, docName, date, clientCompany, grandTotal, data',
+  deliveryChellans: '++id, dcNo, docName, date, clientCompany, data',
+  quotations: '++id, docName, date, clientCompany, data',
+  proformaInvoices: '++id, invoiceNo, docName, date, clientCompany, grandTotal, data'
+});
+
 export async function initSettings() {
   const invoiceCounter = await db.settings.get('invoiceCounter');
   if (!invoiceCounter) {
@@ -63,7 +73,7 @@ export async function updateInvoiceCounter(newNumberStr) {
 }
 
 export async function saveInvoice(invoiceData) {
-  await db.invoices.add(invoiceData);
+  return await db.invoices.add(invoiceData);
 }
 
 export async function getNextCashBillNumber() {
@@ -80,7 +90,7 @@ export async function updateCashBillCounter(newNumberStr) {
 }
 
 export async function saveCashBill(billData) {
-  await db.cashbills.add(billData);
+  return await db.cashbills.add(billData);
 }
 
 export async function getNextDcNumber() {
@@ -97,7 +107,51 @@ export async function updateDcCounter(newNumberStr) {
 }
 
 export async function saveDc(dcData) {
-  await db.deliveryChellans.add(dcData);
+  return await db.deliveryChellans.add(dcData);
+}
+
+export async function updateDc(id, dcData) {
+  return await db.deliveryChellans.update(id, dcData);
+}
+
+export async function deleteDc(id) {
+  return await db.deliveryChellans.delete(id);
+}
+
+// Quotations
+export async function saveQuotation(qData) {
+  return await db.quotations.add(qData);
+}
+export async function updateQuotation(id, qData) {
+  return await db.quotations.update(id, qData);
+}
+export async function deleteQuotation(id) {
+  return await db.quotations.delete(id);
+}
+
+// Proforma Invoices
+export async function saveProformaInvoice(pData) {
+  return await db.proformaInvoices.add(pData);
+}
+export async function updateProformaInvoice(id, pData) {
+  return await db.proformaInvoices.update(id, pData);
+}
+export async function deleteProformaInvoice(id) {
+  return await db.proformaInvoices.delete(id);
+}
+
+export async function updateInvoice(id, data) {
+  return await db.invoices.update(id, data);
+}
+export async function deleteInvoice(id) {
+  return await db.invoices.delete(id);
+}
+
+export async function updateCashBill(id, data) {
+  return await db.cashbills.update(id, data);
+}
+export async function deleteCashBill(id) {
+  return await db.cashbills.delete(id);
 }
 
 // Company info constant

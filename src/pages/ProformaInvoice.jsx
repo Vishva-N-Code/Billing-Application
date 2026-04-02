@@ -1,14 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveInvoice } from '../db';
+import { COMPANY, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveProformaInvoice, deleteProformaInvoice, db } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 
 export default function ProformaInvoice() {
   const previewRef = useRef(null);
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
+  const [savedProformas, setSavedProformas] = useState([]);
 
   const [form, setForm] = useState({
+    docName: '',
     invoiceNo: '',
     clientCompany: '',
     clientAddress: '',
@@ -22,14 +26,40 @@ export default function ProformaInvoice() {
 
   const [signature, setSignature] = useState(null);
 
+  const fetchSaved = async () => {
+    const data = await db.proformaInvoices.toArray();
+    setSavedProformas(data.reverse());
+  };
+
   useEffect(() => {
     const init = async () => {
       await initSettings();
       const num = await getNextInvoiceNumber();
       setForm(f => ({ ...f, invoiceNo: num }));
+      await fetchSaved();
+
+      if (location.state?.loadItem) {
+        const pf = location.state.loadItem;
+        setForm({ ...pf.data.form, id: pf.id });
+        if (pf.data.signature) setSignature(pf.data.signature);
+        setActiveTab('preview');
+      }
     };
     init();
-  }, []);
+  }, [location.state]);
+
+  const loadProforma = (pf) => {
+    setForm({ ...pf.data.form, id: pf.id });
+    if (pf.data.signature) setSignature(pf.data.signature);
+    setActiveTab('preview');
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this proforma invoice from storage?')) {
+      await deleteProformaInvoice(id);
+      await fetchSaved();
+    }
+  };
 
   const addItem = (cfgIndex) => {
     const newConfigs = [...form.configs];
@@ -84,19 +114,46 @@ export default function ProformaInvoice() {
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
-  const handleExport = async () => {
+  const handleSaveOnly = async () => {
     const invoiceData = {
       invoiceNo: form.invoiceNo,
+      docName: form.docName || `Proforma ${form.invoiceNo}`,
       date: form.date,
       clientCompany: form.clientCompany,
       grandTotal: grandTotal,
-      data: { form, items: form.configs.flatMap(c => c.items) }
+      data: { form, signature, items: form.configs.flatMap(c => c.items) }
     };
-    await saveInvoice(invoiceData);
+    if (form.id) {
+      await updateProformaInvoice(form.id, invoiceData);
+      alert('Document updated successfully!');
+    } else {
+      const newId = await saveProformaInvoice(invoiceData);
+      setForm(f => ({ ...f, id: newId }));
+      alert('Document saved to database successfully!');
+    }
+    await fetchSaved();
+  };
+
+  const handleExport = async () => {
+    const invoiceData = {
+      invoiceNo: form.invoiceNo,
+      docName: form.docName || `Proforma ${form.invoiceNo}`,
+      date: form.date,
+      clientCompany: form.clientCompany,
+      grandTotal: grandTotal,
+      data: { form, signature, items: form.configs.flatMap(c => c.items) }
+    };
+    if (form.id) {
+      await updateProformaInvoice(form.id, invoiceData);
+    } else {
+      const newId = await saveProformaInvoice(invoiceData);
+      setForm(f => ({ ...f, id: newId }));
+    }
+    await fetchSaved();
     
     await updateInvoiceCounter(form.invoiceNo);
     const nextNum = await getNextInvoiceNumber();
-    setForm(f => ({ ...f, invoiceNo: nextNum }));
+    setForm(f => ({ ...f, invoiceNo: nextNum, id: undefined }));
     alert('Invoice saved and number auto-incremented based on your entry!');
   };
 
@@ -110,11 +167,21 @@ export default function ProformaInvoice() {
         <div className="tab-bar">
           <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Edit Form</button>
           <button className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>Preview</button>
+          <button className={`tab-btn ${activeTab === 'storage' ? 'active' : ''}`} onClick={() => setActiveTab('storage')}>Saved Docs</button>
         </div>
 
-        <div className="doc-preview-wrapper">
+        <div className="doc-preview-wrapper" style={{ alignItems: 'flex-start' }}>
           {/* === FORM === */}
-          <div className="doc-form-panel" style={{ display: activeTab === 'preview' ? 'none' : undefined }}>
+          <div className="doc-form-panel" style={{ display: activeTab === 'preview' || activeTab === 'storage' ? 'none' : undefined }}>
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Document Options</div>
+              <div className="form-group mb-0">
+                <label>Document Name (For Storage)</label>
+                <input className="form-control" placeholder="E.g. XYZ Corp Initial Estimate"
+                  value={form.docName} onChange={e => setForm({ ...form, docName: e.target.value })} />
+              </div>
+            </div>
+
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Client Details</div>
               <div className="form-group">
@@ -277,7 +344,7 @@ export default function ProformaInvoice() {
           </div>
 
           {/* === PREVIEW === */}
-          <div className="doc-preview-panel" style={{ display: activeTab === 'form' ? 'none' : undefined }}>
+          <div className="doc-preview-panel" style={{ display: activeTab !== 'preview' ? 'none' : undefined }}>
             <div ref={previewRef}>
               {(() => {
                 const printRows = [];
@@ -405,8 +472,51 @@ export default function ProformaInvoice() {
               })})()}
             </div>
 
-            <ExportButtons targetRef={previewRef} filename={`Proforma_Invoice_${form.clientCompany || 'draft'}`} onExport={handleExport} />
+            <ExportButtons targetRef={previewRef} filename={form.docName || `Proforma_Invoice_${form.clientCompany || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
           </div>
+
+          {/* === STORAGE === */}
+          {activeTab === 'storage' && (
+            <div className="doc-storage-panel fade-in" style={{ width: '100%', flex: 1 }}>
+              <div className="card">
+                <div className="card-title">Saved Proforma Invoices</div>
+                <div className="table-wrapper">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Doc Name</th>
+                        <th>Invoice No</th>
+                        <th>Client</th>
+                        <th>Amount</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedProformas.map(pf => (
+                        <tr key={pf.id}>
+                          <td>{formatDate(pf.date)}</td>
+                          <td><strong>{pf.docName}</strong></td>
+                          <td>{pf.invoiceNo}</td>
+                          <td>{pf.clientCompany}</td>
+                          <td>₹{formatCurrency(pf.grandTotal)}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button className="btn btn-sm btn-secondary" onClick={() => loadProforma(pf)}>Edit / View</button>
+                              <button className="btn btn-sm btn-danger" onClick={() => handleDelete(pf.id)}><Trash2 size={14}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {savedProformas.length === 0 && (
+                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '24px' }}>No saved proforma invoices found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <style>{`

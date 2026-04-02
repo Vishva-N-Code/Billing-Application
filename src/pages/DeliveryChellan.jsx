@@ -1,14 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, getNextDcNumber, updateDcCounter, initSettings, saveDc } from '../db';
+import { COMPANY, getNextDcNumber, updateDcCounter, initSettings, saveDc, deleteDc } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 
 export default function DeliveryChellan() {
   const previewRef = useRef(null);
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
+  const [savedDcs, setSavedDcs] = useState([]);
 
   const [form, setForm] = useState({
+    docName: '',
     dcNo: '',
     date: new Date().toISOString().split('T')[0],
     deliveryType: 'Send',
@@ -24,6 +28,11 @@ export default function DeliveryChellan() {
 
   const [signature, setSignature] = useState(null);
 
+  const fetchSaved = async () => {
+    const data = await db.deliveryChellans.toArray();
+    setSavedDcs(data.reverse());
+  };
+
   useEffect(() => {
     const init = async () => {
       await initSettings();
@@ -31,9 +40,38 @@ export default function DeliveryChellan() {
       // Ensure it starts with OSC and is padded to 4 digits (e.g. OSC0029)
       const formattedNum = `OSC${String(num).padStart(4, '0')}`;
       setForm(f => ({ ...f, dcNo: formattedNum }));
+      await fetchSaved();
+
+      if (location.state?.loadItem) {
+        const dc = location.state.loadItem;
+        if (dc.data.form) {
+          setForm({ ...dc.data.form, id: dc.id });
+          if (dc.data.signature) setSignature(dc.data.signature);
+        } else {
+          setForm({ ...dc.data, id: dc.id }); // Legacy format without signature
+        }
+        setActiveTab('preview');
+      }
     };
     init();
-  }, []);
+  }, [location.state]);
+
+  const loadDc = (dc) => {
+    if (dc.data.form) {
+      setForm({ ...dc.data.form, id: dc.id });
+      if (dc.data.signature) setSignature(dc.data.signature);
+    } else {
+      setForm({ ...dc.data, id: dc.id }); // Legacy format without signature
+    }
+    setActiveTab('preview');
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this delivery challan from storage?')) {
+      await deleteDc(id);
+      await fetchSaved();
+    }
+  };
 
   const addVehicle = () => {
     setForm({
@@ -61,14 +99,40 @@ export default function DeliveryChellan() {
     return `${day}-${month}-${year}`;
   };
 
+  const handleSaveOnly = async () => {
+    const dcData = {
+      dcNo: form.dcNo,
+      docName: form.docName || `DC ${form.dcNo}`,
+      date: form.date,
+      clientCompany: form.toName,
+      data: { form, signature }
+    };
+    if (form.id) {
+      await updateDc(form.id, dcData);
+      alert('Document updated successfully!');
+    } else {
+      const newId = await saveDc(dcData);
+      setForm(f => ({ ...f, id: newId }));
+      alert('Document saved to database successfully!');
+    }
+    await fetchSaved();
+  };
+
   const handleExport = async () => {
     const dcData = {
       dcNo: form.dcNo,
+      docName: form.docName || `DC ${form.dcNo}`,
       date: form.date,
       clientCompany: form.toName,
-      data: form
+      data: { form, signature }
     };
-    await saveDc(dcData);
+    if (form.id) {
+      await updateDc(form.id, dcData);
+    } else {
+      const newId = await saveDc(dcData);
+      setForm(f => ({ ...f, id: newId }));
+    }
+    await fetchSaved();
     
     // Auto-increment logic
     const numericPart = form.dcNo.replace(/\D/g, '');
@@ -77,7 +141,7 @@ export default function DeliveryChellan() {
     
     const nextNum = await getNextDcNumber();
     const formattedNum = `OSC${String(nextNum).padStart(4, '0')}`;
-    setForm(f => ({ ...f, dcNo: formattedNum }));
+    setForm(f => ({ ...f, dcNo: formattedNum, id: undefined }));
     alert('Delivery challan saved and number auto-incremented!');
   };
 
@@ -99,12 +163,22 @@ export default function DeliveryChellan() {
         <div className="tab-bar">
           <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Edit Form</button>
           <button className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>Preview</button>
+          <button className={`tab-btn ${activeTab === 'storage' ? 'active' : ''}`} onClick={() => setActiveTab('storage')}>Saved Docs</button>
         </div>
 
         <div className="doc-preview-wrapper" style={{ alignItems: 'flex-start' }}>
           {/* === FORM === */}
-          <div className="doc-form-panel" style={{ display: activeTab === 'preview' ? 'none' : undefined }}>
+          <div className="doc-form-panel" style={{ display: activeTab === 'preview' || activeTab === 'storage' ? 'none' : undefined }}>
             
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Document Options</div>
+              <div className="form-group mb-0">
+                <label>Document Name (For Storage)</label>
+                <input className="form-control" placeholder="E.g. XYZ Corp Machine Transfer"
+                  value={form.docName} onChange={e => setForm({ ...form, docName: e.target.value })} />
+              </div>
+            </div>
+
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Basic Details</div>
               <div className="form-row form-row-2">
@@ -267,7 +341,7 @@ export default function DeliveryChellan() {
           </div>
 
           {/* === PREVIEW === */}
-          <div className="doc-preview-panel" style={{ display: activeTab === 'form' ? 'none' : undefined }}>
+          <div className="doc-preview-panel" style={{ display: activeTab !== 'preview' ? 'none' : undefined }}>
             <div ref={previewRef}>
               <div className="doc-preview" style={{ width: '794px', maxWidth: '100%', margin: '4px auto', padding: '4px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
                 <div className="doc-preview-inner" style={{ minHeight: '900px', display: 'flex', flexDirection: 'column' }}>
@@ -299,7 +373,7 @@ export default function DeliveryChellan() {
                     </div>
 
                     {/* Right-aligned Date and DC No */}
-                    <div style={{ width: '220px', fontSize: '1.2rem', fontWeight: 600, textAlign: 'right', lineHeight: '1.6' }}>
+                    <div style={{ width: '220px', fontSize: '0.9rem', fontWeight: 600, textAlign: 'right', lineHeight: '1.6' }}>
                       <div style={{ display: 'block' }}>Date: {formatDate(form.date)}</div>
                       <div style={{ display: 'block' }}>DC No: {form.dcNo}</div>
                     </div>
@@ -347,8 +421,49 @@ export default function DeliveryChellan() {
               </div>
             </div>
 
-            <ExportButtons targetRef={previewRef} filename={`Delivery_Challan_${form.dcNo}`} onExport={handleExport} />
+            <ExportButtons targetRef={previewRef} filename={form.docName || `Delivery_Challan_${form.dcNo}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
           </div>
+
+          {/* === STORAGE === */}
+          {activeTab === 'storage' && (
+            <div className="doc-storage-panel fade-in" style={{ width: '100%', flex: 1 }}>
+              <div className="card">
+                <div className="card-title">Saved Delivery Challans</div>
+                <div className="table-wrapper">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Doc Name</th>
+                        <th>DC No</th>
+                        <th>Client</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedDcs.map(dc => (
+                        <tr key={dc.id}>
+                          <td>{formatDate(dc.date)}</td>
+                          <td><strong>{dc.docName}</strong></td>
+                          <td>{dc.dcNo}</td>
+                          <td>{dc.clientCompany}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button className="btn btn-sm btn-secondary" onClick={() => loadDc(dc)}>Edit / View</button>
+                              <button className="btn btn-sm btn-danger" onClick={() => handleDelete(dc.id)}><Trash2 size={14}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {savedDcs.length === 0 && (
+                        <tr><td colSpan="5" style={{ textAlign: 'center', padding: '24px' }}>No saved delivery challans found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         <style>{`

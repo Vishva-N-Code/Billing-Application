@@ -1,14 +1,19 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY } from '../db';
+import { COMPANY, db, saveQuotation, deleteQuotation } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 
 export default function Quotation() {
   const previewRef = useRef(null);
+  const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
+  const [savedQuotations, setSavedQuotations] = useState([]);
 
   const [form, setForm] = useState({
+    docName: '',
+    personInCharge: '',
     toCompany: '',
     toAddress: '',
     date: new Date().toISOString().split('T')[0],
@@ -42,6 +47,74 @@ export default function Quotation() {
     setForm({ ...form, notes: updated });
   };
 
+  const fetchSaved = async () => {
+    const data = await db.quotations.toArray();
+    setSavedQuotations(data.reverse());
+  };
+
+  useEffect(() => {
+    const init = async () => {
+      fetchSaved();
+      if (location.state?.loadItem) {
+        const q = location.state.loadItem;
+        setForm({ ...q.data.form, id: q.id });
+        setItems(q.data.items);
+        if (q.data.signature) setSignature(q.data.signature);
+        setActiveTab('preview');
+      }
+    };
+    init();
+  }, [location.state]);
+
+  const loadQuotation = (q) => {
+    setForm({ ...q.data.form, id: q.id });
+    setItems(q.data.items);
+    if (q.data.signature) setSignature(q.data.signature);
+    setActiveTab('preview');
+  };
+
+  const handleDelete = async (id) => {
+    if (window.confirm('Are you sure you want to delete this quotation from storage?')) {
+      await deleteQuotation(id);
+      await fetchSaved();
+    }
+  };
+
+  const handleSaveOnly = async () => {
+    const qData = {
+      docName: form.docName || `Quotation - ${form.toCompany || 'Draft'}`,
+      date: form.date,
+      clientCompany: form.toCompany,
+      data: { form, items, signature }
+    };
+    if (form.id) {
+      await updateQuotation(form.id, qData);
+      alert('Quotation updated successfully!');
+    } else {
+      const newId = await saveQuotation(qData);
+      setForm(f => ({ ...f, id: newId }));
+      alert('Document saved to database successfully!');
+    }
+    await fetchSaved();
+  };
+
+  const handleExport = async () => {
+    const qData = {
+      docName: form.docName || `Quotation - ${form.toCompany || 'Draft'}`,
+      date: form.date,
+      clientCompany: form.toCompany,
+      data: { form, items, signature }
+    };
+    if (form.id) {
+      await updateQuotation(form.id, qData);
+    } else {
+      const newId = await saveQuotation(qData);
+      setForm(f => ({ ...f, id: newId }));
+    }
+    await fetchSaved();
+    alert('Quotation saved to storage successfully!');
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
@@ -65,13 +138,28 @@ export default function Quotation() {
         <div className="tab-bar">
           <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Edit Form</button>
           <button className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>Preview</button>
+          <button className={`tab-btn ${activeTab === 'storage' ? 'active' : ''}`} onClick={() => setActiveTab('storage')}>Saved Docs</button>
         </div>
 
         <div className="doc-preview-wrapper">
           {/* === FORM PANEL === */}
-          <div className="doc-form-panel" style={{ display: activeTab === 'preview' ? 'none' : undefined }}>
+          <div className="doc-form-panel" style={{ display: activeTab === 'preview' || activeTab === 'storage' ? 'none' : undefined }}>
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Document Options</div>
+              <div className="form-group mb-0">
+                <label>Document Name (For Storage)</label>
+                <input className="form-control" placeholder="E.g. XYZ Corp Quotation"
+                  value={form.docName} onChange={e => setForm({ ...form, docName: e.target.value })} />
+              </div>
+            </div>
+
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Recipient Details</div>
+              <div className="form-group">
+                <label>Person in Charge (Optional)</label>
+                <input className="form-control" placeholder="e.g. Mr. John Doe"
+                  value={form.personInCharge} onChange={e => setForm({ ...form, personInCharge: e.target.value })} />
+              </div>
               <div className="form-group">
                 <label>To (Company Name)</label>
                 <input className="form-control" placeholder="Client company name"
@@ -155,7 +243,7 @@ export default function Quotation() {
           </div>
 
           {/* === PREVIEW PANEL === */}
-          <div className="doc-preview-panel" style={{ display: activeTab === 'form' ? 'none' : undefined }}>
+          <div className="doc-preview-panel" style={{ display: activeTab !== 'preview' ? 'none' : undefined }}>
             <div className="doc-preview" ref={previewRef} style={{ width: '794px', maxWidth: '100%', margin: '4px auto', padding: '4px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
               <div className="doc-preview-inner">
                 {/* Header */}
@@ -183,6 +271,7 @@ export default function Quotation() {
                   <div>
                     <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>TO:</div>
                     <div style={{ paddingLeft: '20px', fontSize: '0.82rem' }}>
+                      {form.personInCharge && <div style={{ fontWeight: 600, marginBottom: '2px' }}>{form.personInCharge}</div>}
                       <strong>{form.toCompany || '_______________'}</strong>
                       <br />
                       {(form.toAddress || '').split('\n').map((line, i) => (
@@ -264,8 +353,47 @@ export default function Quotation() {
               </div>
             </div>
 
-            <ExportButtons targetRef={previewRef} filename="Quotation" />
+            <ExportButtons targetRef={previewRef} filename={form.docName || "Quotation"} onExport={handleExport} onSaveOnly={handleSaveOnly} />
           </div>
+
+          {/* === STORAGE === */}
+          {activeTab === 'storage' && (
+            <div className="doc-storage-panel fade-in">
+              <div className="card">
+                <div className="card-title">Saved Quotations</div>
+                <div className="table-wrapper">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Doc Name</th>
+                        <th>Client</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {savedQuotations.map(q => (
+                        <tr key={q.id}>
+                          <td>{formatDate(q.date)}</td>
+                          <td><strong>{q.docName}</strong></td>
+                          <td>{q.clientCompany}</td>
+                          <td>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              <button className="btn btn-sm btn-secondary" onClick={() => loadQuotation(q)}>Edit / View</button>
+                              <button className="btn btn-sm btn-danger" onClick={() => handleDelete(q.id)}><Trash2 size={14}/></button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      {savedQuotations.length === 0 && (
+                        <tr><td colSpan="4" style={{ textAlign: 'center', padding: '24px' }}>No saved quotations found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Mobile: show both tabs content via CSS but controlled by state */}

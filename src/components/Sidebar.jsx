@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { FileText, Receipt, ClipboardList, Users, Banknote, Menu, X, Truck } from 'lucide-react';
+import { FileText, Receipt, ClipboardList, Users, Banknote, Menu, X, Truck, Database } from 'lucide-react';
 import { useState } from 'react';
 
 export default function Sidebar() {
@@ -12,6 +12,7 @@ export default function Sidebar() {
     { to: '/cash-bill', icon: <Banknote />, label: 'Cash Bill' },
     { to: '/delivery-chellan', icon: <Truck />, label: 'Delivery Challan' },
     { to: '/customers', icon: <Users />, label: 'Customers' },
+    { to: '/storage', icon: <Database />, label: 'Saved Documents' },
   ];
 
   return (
