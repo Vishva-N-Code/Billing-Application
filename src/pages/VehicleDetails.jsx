@@ -111,84 +111,76 @@ export default function VehicleDetails() {
     <>
       {/* Toast */}
       {toast && (
-        <div style={{
-          position: 'fixed', top: '20px', right: '24px', zIndex: 9999,
-          background: toast.type === 'info' ? 'var(--accent-gold)' : '#22c55e',
-          color: '#fff', padding: '10px 20px', borderRadius: '8px',
-          fontWeight: 600, fontSize: '0.9rem', boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
-          animation: 'fadeInDown 0.2s ease'
-        }}>
+        <div className={`toast fade-in ${toast.type || 'success'}`}>
           {toast.msg}
         </div>
       )}
 
       <div className="page-header">
-        <h1>Vehicle Details</h1>
-        <p>Store your company's vehicle registration &amp; chassis numbers for use in Delivery Challans</p>
+        <h1>Vehicle Fleet Management</h1>
+        <p>Centrally manage your cranes, forklifts, and transportation vehicles for quick auto-fill.</p>
       </div>
 
-      <div className="page-body fade-in">
+      <div className="page-body">
         {/* Top actions */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px' }}>
+        <div className="toolbar fade-in">
+          <div style={{ flex: 1 }}></div>
           <button className="btn btn-primary" onClick={handleAddSection}>
-            <Plus size={16} /> Add New Section
+            <Plus size={18} /> ADD NEW SECTION
           </button>
         </div>
 
         {sections.length === 0 && (
-          <div className="card" style={{ textAlign: 'center', padding: '48px', color: 'var(--text-muted)' }}>
-            <Car size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
-            <p>No vehicle sections yet. Click <strong>Add New Section</strong> to begin.</p>
+          <div className="card fade-in" style={{ textAlign: 'center', padding: '80px 20px' }}>
+            <Car size={48} style={{ marginBottom: '20px', opacity: 0.2, color: 'var(--accent-gold)' }} />
+            <h3 style={{ color: 'var(--text-secondary)', marginBottom: '8px' }}>No Vehicle Sections</h3>
+            <p style={{ color: 'var(--text-muted)' }}>Click "Add New Section" to start building your fleet database.</p>
           </div>
         )}
 
         {sections.map(section => (
           <div
             key={section.id}
-            className="card"
-            style={{ marginBottom: '20px', overflow: 'hidden', transition: 'box-shadow 0.2s' }}
+            className="card fade-in"
+            style={{ marginBottom: '24px' }}
           >
             {/* Section header */}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
-              marginBottom: collapsed[section.id] ? 0 : '16px',
-              flexWrap: 'wrap'
-            }}>
-              {/* Section name editable */}
-              <Car size={18} style={{ color: 'var(--accent-gold)', flexShrink: 0 }} />
+            <div className="section-header-compact">
+              <div className="section-icon">
+                <Car size={18} />
+              </div>
+              
               <input
                 className="form-control"
                 value={section.sectionName}
                 onChange={e => handleSectionNameChange(section.id, e.target.value)}
+                placeholder="SECTION NAME"
                 style={{
-                  flex: 1, minWidth: '180px', fontWeight: 700, fontSize: '1rem',
-                  textTransform: 'uppercase', letterSpacing: '0.5px',
-                  border: '1.5px dashed var(--border-color)', background: 'transparent',
-                  marginBottom: 0
+                  flex: 1, minWidth: '200px', fontWeight: 800, fontSize: '1.1rem',
+                  textTransform: 'uppercase', letterSpacing: '0.05em',
+                  border: 'none', background: 'transparent', padding: '4px 0'
                 }}
               />
-              <div style={{ display: 'flex', gap: '8px', marginLeft: 'auto', flexShrink: 0 }}>
+              
+              <div className="btn-group" style={{ marginLeft: 'auto' }}>
                 <button
                   className="btn btn-sm btn-secondary"
                   onClick={() => handleSaveSection(section)}
                   disabled={saving[section.id]}
-                  title="Save this section"
                 >
                   {saving[section.id]
-                    ? <span style={{ fontSize: '0.8rem' }}>Saving…</span>
-                    : <><Save size={14} /> Save</>}
+                    ? <span className="spin" style={{ display: 'inline-block' }}>◌</span>
+                    : <><Save size={14} /> SAVE</>}
                 </button>
                 <button
                   className="btn btn-sm btn-secondary"
                   onClick={() => toggleCollapse(section.id)}
-                  title="Collapse / Expand"
                 >
-                  {collapsed[section.id] ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+                  {collapsed[section.id] ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
                 </button>
                 <button
                   className="btn btn-sm btn-danger"
                   onClick={() => handleDeleteSection(section.id)}
-                  title="Delete section"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -197,16 +189,16 @@ export default function VehicleDetails() {
 
             {/* Section body */}
             {!collapsed[section.id] && (
-              <>
-                <div className="table-wrapper" style={{ marginBottom: '12px' }}>
+              <div className="slide-in">
+                <div className="table-wrapper" style={{ marginBottom: '20px' }}>
                   <table className="table">
                     <thead>
                       <tr>
-                        <th style={{ minWidth: '130px' }}>Name / Label</th>
-                        <th style={{ minWidth: '150px' }}>Registration Number</th>
-                        <th style={{ minWidth: '180px' }}>Chassis Number</th>
-                        <th style={{ minWidth: '120px' }}>Value (₹)</th>
-                        <th style={{ width: '40px' }}></th>
+                        <th style={{ minWidth: '160px' }}>VEHICLE NAME / BRAND</th>
+                        <th style={{ minWidth: '180px' }}>REGISTRATION NUMBER</th>
+                        <th style={{ minWidth: '200px' }}>CHASSIS NUMBER</th>
+                        <th style={{ minWidth: '140px' }}>EST. VALUE (₹)</th>
+                        <th style={{ width: '50px' }}></th>
                       </tr>
                     </thead>
                     <tbody>
@@ -259,12 +251,12 @@ export default function VehicleDetails() {
                   </table>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+                <div className="btn-group" style={{ marginTop: '12px' }}>
                   <button className="btn btn-sm btn-secondary" onClick={() => handleAddVehicle(section.id)}>
-                    <Plus size={14} /> Add Vehicle Row
+                    <Plus size={14} /> ADD VEHICLE ROW
                   </button>
                 </div>
-              </>
+              </div>
             )}
           </div>
         ))}

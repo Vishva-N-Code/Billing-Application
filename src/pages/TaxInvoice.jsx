@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { db, COMPANY, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveInvoice, deleteInvoice } from '../db';
+import { db, COMPANY, getCompanyProfile, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveInvoice, updateInvoice, deleteInvoice, saveCustomer } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
+import CustomDateInput from '../components/CustomDateInput';
 
-export default function TaxInvoice() {
+export default function TaxInvoice({ exportItem }) {
   const previewRef = useRef(null);
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
@@ -29,6 +30,7 @@ export default function TaxInvoice() {
     billingMobile: '',
     billingWebsite: '',
     gstType: 'cgst_sgst', // 'cgst_sgst' or 'igst'
+    termsAndConditions: '',
   });
 
   const [items, setItems] = useState([
@@ -37,6 +39,7 @@ export default function TaxInvoice() {
 
   const [signature, setSignature] = useState(null);
   const [isFetchingInfo, setIsFetchingInfo] = useState(false);
+  const [companyProfile, setCompanyProfile] = useState(COMPANY);
 
   const GST_STATE_CODES = {
     '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
@@ -76,7 +79,7 @@ export default function TaxInvoice() {
     // Auto detect GST-TYPE cleanly if they manually enter an accurate GSTIN
     if (type === 'gstin' && query.length >= 2) {
       const stateCode = query.substring(0, 2);
-      const autoGstType = stateCode === COMPANY.gstin.substring(0, 2) ? 'cgst_sgst' : 'igst';
+      const autoGstType = stateCode === companyProfile.gstin.substring(0, 2) ? 'cgst_sgst' : 'igst';
       setForm(f => ({ ...f, gstType: autoGstType }));
     }
   };
@@ -88,23 +91,35 @@ export default function TaxInvoice() {
 
   useEffect(() => {
     const init = async () => {
+      const itemToLoad = exportItem || location.state?.loadItem;
+      
+      if (itemToLoad) {
+        // Load data immediately for export
+        const inv = itemToLoad;
+        setForm({ ...inv.data.form, id: inv.id });
+        setItems(inv.data.items);
+        if (inv.data.signature) setSignature(inv.data.signature);
+        setActiveTab('preview');
+        
+        // Parallel load essential company profile
+        const profile = await getCompanyProfile();
+        if (profile) setCompanyProfile(profile);
+        return;
+      }
+
       await initSettings();
       const num = await getNextInvoiceNumber();
       setForm(f => ({ ...f, invoiceNo: num }));
       const allCustomers = await db.customers.toArray();
       setCustomers(allCustomers);
       await fetchSaved();
-
-      if (location.state?.loadItem) {
-        const inv = location.state.loadItem;
-        setForm({ ...inv.data.form, id: inv.id });
-        setItems(inv.data.items);
-        if (inv.data.signature) setSignature(inv.data.signature);
-        setActiveTab('preview');
-      }
+      
+      const profile = await getCompanyProfile();
+      setCompanyProfile(profile);
+      setForm(f => ({ ...f, termsAndConditions: '' }));
     };
     init();
-  }, [location.state]);
+  }, [location.state, exportItem]);
 
   const loadInvoice = (inv) => {
     setForm({ ...inv.data.form, id: inv.id });
@@ -123,9 +138,10 @@ export default function TaxInvoice() {
   const handleCompanySearch = (val) => {
     setForm({ ...form, billingCompany: val });
     if (val.length >= 2) {
-      const matches = customers.filter(c =>
-        c.companyName.toLowerCase().includes(val.toLowerCase())
-      );
+      const matches = customers.filter(c => {
+        const name = (c.companyName || c.company_name || '').toLowerCase();
+        return name.includes(val.toLowerCase());
+      });
       setSuggestions(matches);
       setShowSuggestions(matches.length > 0);
       setShowNewCustomerPrompt(matches.length === 0 && val.length >= 3);
@@ -161,7 +177,7 @@ export default function TaxInvoice() {
   const selectCustomer = (customer) => {
     setForm({
       ...form,
-      billingCompany: customer.companyName,
+      billingCompany: customer.companyName || customer.company_name,
       billingGstin: customer.gstin,
       billingAddress: customer.address,
       billingMobile: customer.mobile || '',
@@ -172,7 +188,7 @@ export default function TaxInvoice() {
   };
 
   const addAsNewCustomer = async () => {
-    await db.customers.add({
+    await saveCustomer({
       companyName: form.billingCompany,
       gstin: form.billingGstin,
       address: form.billingAddress,
@@ -289,14 +305,13 @@ export default function TaxInvoice() {
       </div>
       <div className="page-body fade-in">
         <div className="tab-bar">
-          <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Edit Form</button>
+          <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Details</button>
           <button className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>Preview</button>
-          <button className={`tab-btn ${activeTab === 'storage' ? 'active' : ''}`} onClick={() => setActiveTab('storage')}>Saved Docs</button>
         </div>
 
         <div className="doc-preview-wrapper">
           {/* === FORM === */}
-          <div className="doc-form-panel" style={{ display: activeTab === 'preview' || activeTab === 'storage' ? 'none' : undefined }}>
+          <div className="doc-form-panel" style={{ display: activeTab === 'form' ? 'block' : 'none' }}>
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Document Options</div>
               <div className="form-group">
@@ -327,8 +342,7 @@ export default function TaxInvoice() {
                 </div>
                 <div className="form-group">
                   <label>Date</label>
-                  <input className="form-control" type="date" value={form.date}
-                    onChange={e => setForm({ ...form, date: e.target.value })} />
+                  <CustomDateInput className="form-control" value={form.date} onChange={val => setForm({ ...form, date: val })} />
                 </div>
                 <div className="form-group">
                   <label>HSN Code</label>
@@ -362,7 +376,7 @@ export default function TaxInvoice() {
                   <div className="autocomplete-dropdown">
                     {suggestions.map(c => (
                       <div key={c.id} className="autocomplete-item" onMouseDown={() => selectCustomer(c)}>
-                        <div className="company-name">{c.companyName}</div>
+                        <div className="company-name">{c.companyName || c.company_name}</div>
                         <div className="gstin-text">{c.gstin} | {c.address}</div>
                       </div>
                     ))}
@@ -489,135 +503,179 @@ export default function TaxInvoice() {
               </div>
             </div>
 
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Terms & Conditions</div>
+              <div className="form-group mb-0">
+                <textarea className="form-control" rows={3} placeholder="Add terms and conditions..."
+                  value={form.termsAndConditions} onChange={e => setForm({ ...form, termsAndConditions: e.target.value })} />
+              </div>
+            </div>
+
             <div className="card">
               <SignatureUpload signature={signature} onSignatureChange={setSignature} />
             </div>
           </div>
 
           {/* === PREVIEW === */}
-          <div className="doc-preview-panel" style={{ display: activeTab !== 'preview' ? 'none' : undefined }}>
-            <div className="doc-preview" ref={previewRef} style={{ width: '794px', maxWidth: '100%', margin: '4px auto', padding: '4px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
-              <div className="doc-preview-inner">
-                {/* Header matching provided image */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '16px 0 32px 0' }}>
-                  <div style={{ width: '220px', textAlign: 'left' }}>
-                    <img src="/logo.png" alt="Logo" style={{ height: '70px', objectFit: 'contain', mixBlendMode: 'multiply' }} />
-                  </div>
-                  
-                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '1px' }}>
-                    Tax Invoice
-                  </div>
-                  
-                  <div style={{ width: '220px', textAlign: 'right', fontSize: '1rem', fontWeight: 600, lineHeight: '1.6' }}>
-                    {isDuplicate && <div style={{ display: 'block', fontSize: '1.1rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '2px', color: '#444' }}>DUPLICATE COPY</div>}
-                    <div style={{ display: 'block' }}>Date: {formatDate(form.date)}</div>
-                    <div style={{ display: 'block', textTransform: 'uppercase' }}>INVOICE NO. {form.invoiceNo}</div>
-                  </div>
-                </div>
+          <div className="doc-preview-panel" style={{ display: activeTab === 'preview' ? 'block' : 'none' }}>
+            <div className="doc-preview-container">
+              <div ref={previewRef} className="print-capture-wrap">
+                <div className="doc-preview">
+                  <div className="doc-preview-inner">
+                    {/* Header matching provided image */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0 16px 0' }}>
+                      <div style={{ width: '220px', textAlign: 'left' }}>
+                        <img src="/logo.png" alt="Logo" style={{ height: '70px', objectFit: 'contain' }} />
+                      </div>
+                      
+                      <div style={{ fontSize: '1.5rem', fontWeight: 'bold', letterSpacing: '1px' }}>
+                        Tax Invoice
+                      </div>
+                      
+                      <div style={{ width: '220px', textAlign: 'right', fontSize: '1rem', fontWeight: 600, lineHeight: '1.6' }}>
+                        {isDuplicate && <div style={{ display: 'block', fontSize: '1.1rem', fontWeight: 800, textTransform: 'uppercase', marginBottom: '2px', color: '#444' }}>DUPLICATE COPY</div>}
+                        <div style={{ display: 'block' }}>Date: {formatDate(form.date)}</div>
+                        <div style={{ display: 'block', textTransform: 'uppercase' }}>INVOICE NO. {form.invoiceNo}</div>
+                      </div>
+                    </div>
 
-                {/* Two-column: From | Billing To Using Table for strict PDF rendering */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '1px solid #333', borderBottom: '1px solid #333', marginBottom: '12px' }}>
-                  <tbody>
-                    <tr>
-                      <td style={{ width: '50%', verticalAlign: 'top', padding: '12px 12px 12px 0', borderRight: '1px solid #333' }}>
-                        <h4 style={{ fontSize: '1rem', marginBottom: '6px', fontWeight: 800, textTransform: 'uppercase' }}>{COMPANY.name}</h4>
-                        <div style={{ whiteSpace: 'pre-line', fontSize: '0.9rem', lineHeight: '1.5' }}>
-                          {COMPANY.address}
-                        </div>
-                        <div style={{ fontSize: '0.9rem', marginTop: '4px' }}>GSTIN : {COMPANY.gstin}</div>
-                        <div style={{ fontSize: '0.9rem' }}>Mobile: {COMPANY.mobile}</div>
-                        <div style={{ fontSize: '0.9rem' }}>Email: {COMPANY.email}</div>
-                        <div style={{ fontSize: '0.9rem' }}>Website: {COMPANY.website}</div>
-                        {form.workOrderNo && <div style={{ fontSize: '0.9rem', marginTop: '4px', fontWeight: 600 }}>Work Order No: {form.workOrderNo}</div>}
-                      </td>
-                      <td style={{ width: '50%', verticalAlign: 'top', padding: '12px 0 12px 12px' }}>
-                        <h4 style={{ fontSize: '1rem', marginBottom: '6px', fontWeight: 800 }}>Billing To:</h4>
-                        {form.reference && <div style={{ fontSize: '0.95rem', marginBottom: '2px', fontWeight: 600 }}>Ref: {form.reference}</div>}
-                        <div style={{ fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase' }}>{form.billingCompany || '—'}</div>
-                        <div style={{ whiteSpace: 'pre-line', fontSize: '0.9rem', marginTop: '4px', lineHeight: '1.5', textTransform: 'uppercase' }}>{form.billingAddress}</div>
-                        {form.billingGstin && <div style={{ fontSize: '0.9rem', marginTop: '4px', textTransform: 'uppercase' }}>GSTIN: {form.billingGstin}</div>}
-                        {form.billingMobile && <div style={{ fontSize: '0.9rem' }}>Mobile: {form.billingMobile}</div>}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* HSN Code */}
-                <div style={{ fontWeight: 700, fontSize: '0.92rem', marginBottom: '8px' }}>
-                  HSN CODE: {form.hsnCode}
-                </div>
-
-                {/* Items Table */}
-                <table className="doc-table" style={{ fontSize: '0.92rem' }}>
-                  <thead>
-                    <tr>
-                      <th style={{ width: '40px', fontSize: '0.88rem' }}>S.NO</th>
-                      <th style={{ fontSize: '0.88rem' }}>DESCRIPTION</th>
-                      <th style={{ textAlign: 'right', fontSize: '0.88rem' }}>AMOUNT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, i) => (
-                      <tr key={i}>
-                        <td>{i + 1}</td>
-                        <td>
-                          {item.description || '—'}
-                          {item.quantity && item.unitType ? (
-                            <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-                              {item.unitType === 'hours' ? `Over time - ${item.quantity} hours` : `${item.quantity} shift(s)`}
-                              {item.rate && ` @ Rs. ${formatCurrency(item.rate)}`}
+                    {/* Two-column: From | Billing To Using Table for strict PDF rendering */}
+                    <table style={{ width: '100%', borderCollapse: 'collapse', borderTop: '1px solid #333', borderBottom: '1px solid #333', marginBottom: '8px' }}>
+                      <tbody>
+                        <tr>
+                          <td style={{ width: '50%', verticalAlign: 'top', padding: '8px 10px 8px 0', borderRight: '1px solid #333' }}>
+                            <h4 style={{ fontSize: '1rem', marginBottom: '6px', fontWeight: 800, textTransform: 'uppercase' }}>{companyProfile.name}</h4>
+                            <div style={{ whiteSpace: 'pre-line', fontSize: '0.85rem', lineHeight: '1.4' }}>
+                              {companyProfile.address}
                             </div>
-                          ) : null}
-                        </td>
-                        <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(calcAmount(item))}</span></div></td>
-                      </tr>
-                    ))}
-
-                    {/* Totals integrated into the main doc-table using colSpan */}
-                    <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
-                      <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>SUBTOTAL</td>
-                      <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(subtotal)}</span></div></td>
-                    </tr>
-                    {form.gstType === 'cgst_sgst' ? (
-                      <>
-                        <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
-                          <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>CGST 09%</td>
-                          <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(cgst)}</span></div></td>
+                            <div style={{ fontSize: '0.9rem', marginTop: '4px' }}>GSTIN : {companyProfile.gstin}</div>
+                            <div style={{ fontSize: '0.9rem' }}>Mobile: {companyProfile.mobile}</div>
+                            <div style={{ fontSize: '0.9rem' }}>Email: {companyProfile.email}</div>
+                            <div style={{ fontSize: '0.9rem' }}>Website: {companyProfile.website}</div>
+                            {form.workOrderNo && <div style={{ fontSize: '0.9rem', marginTop: '4px', fontWeight: 600 }}>Work Order No: {form.workOrderNo}</div>}
+                          </td>
+                          <td style={{ width: '50%', verticalAlign: 'top', padding: '8px 0 8px 10px' }}>
+                            <h4 style={{ fontSize: '1rem', marginBottom: '6px', fontWeight: 800 }}>Billing To:</h4>
+                            {form.reference && <div style={{ fontSize: '0.95rem', marginBottom: '2px', fontWeight: 600 }}>Ref: {form.reference}</div>}
+                            <div style={{ fontWeight: 800, fontSize: '0.95rem', textTransform: 'uppercase' }}>{form.billingCompany || '—'}</div>
+                            <div style={{ whiteSpace: 'pre-line', fontSize: '0.85rem', marginTop: '3px', lineHeight: '1.4', textTransform: 'uppercase' }}>{form.billingAddress}</div>
+                            {form.billingGstin && <div style={{ fontSize: '0.9rem', marginTop: '4px', textTransform: 'uppercase' }}>GSTIN: {form.billingGstin}</div>}
+                            {form.billingMobile && <div style={{ fontSize: '0.9rem' }}>Mobile: {form.billingMobile}</div>}
+                          </td>
                         </tr>
-                        <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
-                          <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>SGST 09%</td>
-                          <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(sgst)}</span></div></td>
-                        </tr>
-                      </>
-                    ) : (
-                      <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
-                        <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>IGST 18%</td>
-                        <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(igst)}</span></div></td>
-                      </tr>
-                    )}
-                    <tr style={{ fontWeight: 800, background: '#f0f0f0' }}>
-                      <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px', fontSize: '1rem' }}>GRAND TOTAL</td>
-                      <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', fontSize: '1rem' }}><span>Rs.</span> <span>{formatCurrency(grandTotal)}</span></div></td>
-                    </tr>
-                  </tbody>
-                </table>
+                      </tbody>
+                    </table>
 
-                {/* Payment & Signature */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', border: '1px solid #ccc', borderRadius: '4px', padding: '12px', marginTop: '16px', fontSize: '0.88rem' }}>
-                  <div style={{ flex: '0 0 auto' }}>
-                    <h4 style={{ fontSize: '0.92rem', fontWeight: 700, marginBottom: '6px', textDecoration: 'underline' }}>PAYMENT INFORMATION</h4>
-                    <p>Account No: {COMPANY.bankAccount}</p>
-                    <p>Account Name: {COMPANY.bankName}</p>
-                    <p>IFSC: {COMPANY.bankIFSC}</p>
-                    <p>Branch: {COMPANY.bankBranch}</p>
-                  </div>
-                  <div style={{ textAlign: 'center', minWidth: '140px' }}>
-                    {signature && (
-                      <>
-                        <img src={signature} alt="Signature" className="signature-img" />
-                        <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
-                      </>
-                    )}
+                    {/* HSN Code */}
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem', marginBottom: '8px' }}>
+                      HSN CODE: {form.hsnCode}
+                    </div>
+
+                    {/* Items Table */}
+                    <table className="doc-table" style={{ fontSize: '0.92rem', tableLayout: 'fixed', width: '100%' }}>
+                      <thead>
+                        <tr>
+                          <th style={{ width: '50px', fontSize: '0.88rem' }}>S.NO</th>
+                          <th style={{ fontSize: '0.88rem' }}>DESCRIPTION</th>
+                          <th style={{ textAlign: 'right', fontSize: '0.88rem', width: '160px' }}>AMOUNT</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((item, i) => (
+                          <tr key={i}>
+                            <td>{i + 1}</td>
+                            <td>
+                              {item.description || '—'}
+                              {item.quantity && item.unitType ? (
+                                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                                  {item.unitType === 'hours' ? `Over time - ${item.quantity} hours` : `${item.quantity} shift(s)`}
+                                  {item.rate && ` @ Rs. ${formatCurrency(item.rate)}`}
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="amount-col" style={{ boxSizing: 'border-box' }}>
+                              <span style={{ float: 'left' }}>Rs.</span>
+                              <span style={{ float: 'right' }}>{formatCurrency(calcAmount(item))}</span>
+                              <div style={{ clear: 'both' }} />
+                            </td>
+                          </tr>
+                        ))}
+
+                        {/* Totals integrated into the main doc-table using colSpan */}
+                        <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
+                          <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>SUBTOTAL</td>
+                          <td className="amount-col" style={{ boxSizing: 'border-box' }}>
+                            <span style={{ float: 'left' }}>Rs.</span>
+                            <span style={{ float: 'right' }}>{formatCurrency(subtotal)}</span>
+                            <div style={{ clear: 'both' }} />
+                          </td>
+                        </tr>
+                        {form.gstType === 'cgst_sgst' ? (
+                          <>
+                            <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
+                              <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>CGST 09%</td>
+                              <td className="amount-col" style={{ boxSizing: 'border-box' }}>
+                                <span style={{ float: 'left' }}>Rs.</span>
+                                <span style={{ float: 'right' }}>{formatCurrency(cgst)}</span>
+                                <div style={{ clear: 'both' }} />
+                              </td>
+                            </tr>
+                            <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
+                              <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>SGST 09%</td>
+                              <td className="amount-col" style={{ boxSizing: 'border-box' }}>
+                                <span style={{ float: 'left' }}>Rs.</span>
+                                <span style={{ float: 'right' }}>{formatCurrency(sgst)}</span>
+                                <div style={{ clear: 'both' }} />
+                              </td>
+                            </tr>
+                          </>
+                        ) : (
+                          <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
+                            <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>IGST 18%</td>
+                            <td className="amount-col" style={{ boxSizing: 'border-box' }}>
+                              <span style={{ float: 'left' }}>Rs.</span>
+                              <span style={{ float: 'right' }}>{formatCurrency(igst)}</span>
+                              <div style={{ clear: 'both' }} />
+                            </td>
+                          </tr>
+                        )}
+                        <tr style={{ fontWeight: 800, background: '#f0f0f0' }}>
+                          <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px', fontSize: '1rem' }}>GRAND TOTAL</td>
+                          <td className="amount-col" style={{ boxSizing: 'border-box' }}>
+                            <span style={{ float: 'left', fontSize: '1rem' }}>Rs.</span>
+                            <span style={{ float: 'right', fontSize: '1rem' }}>{formatCurrency(grandTotal)}</span>
+                            <div style={{ clear: 'both' }} />
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    {/* Payment & Signature */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', border: '1px solid #ccc', borderRadius: '4px', padding: '10px', marginTop: '10px', fontSize: '0.85rem' }}>
+                      <div style={{ flex: '1' }}>
+                        <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '4px', textDecoration: 'underline' }}>PAYMENT INFORMATION</h4>
+                        <p>Account No: {companyProfile.bankAccount}</p>
+                        <p>Account Name: {companyProfile.bankName}</p>
+                        <p>IFSC: {companyProfile.bankIFSC}</p>
+                        <p>Branch: {companyProfile.bankBranch}</p>
+                      </div>
+                      {form.termsAndConditions && (
+                        <div style={{ flex: '1', padding: '0 12px', borderLeft: '1px solid #eee' }}>
+                          <h4 style={{ fontSize: '0.85rem', fontWeight: 700, marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS</h4>
+                          <div style={{ fontSize: '0.75rem', whiteSpace: 'pre-line', lineHeight: '1.4', color: '#444' }}>
+                            {form.termsAndConditions}
+                          </div>
+                        </div>
+                      )}
+                      <div style={{ textAlign: 'center', minWidth: '140px' }}>
+                        {signature && (
+                          <>
+                            <img src={signature} alt="Signature" className="signature-img" />
+                            <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
+                          </>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -684,9 +742,7 @@ export default function TaxInvoice() {
         }
         @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        @media (min-width: 769px) {
-          .doc-form-panel, .doc-preview-panel { display: block !important; }
-        }
+
       `}</style>
       </div>
     </>

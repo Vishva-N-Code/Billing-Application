@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { db } from '../db';
+import { db, saveCustomer, updateCustomer, deleteCustomer } from '../db';
 import { Search, Plus, Edit2, Trash2, Building2, MapPin, Phone, Mail, Globe, Hash, Users } from 'lucide-react';
 
 export default function Customers() {
@@ -14,24 +14,31 @@ export default function Customers() {
   useEffect(() => { loadCustomers(); }, []);
 
   const loadCustomers = async () => {
-    const all = await db.customers.toArray();
-    setCustomers(all);
+    try {
+      const all = await db.customers.toArray();
+      setCustomers(all || []);
+    } catch (err) {
+      console.error('Failed to load customers:', err);
+      // Fallback to empty array if Dexie fails to load
+      setCustomers([]);
+    }
   };
 
   const filtered = customers.filter(c => {
     const q = search.toLowerCase();
-    return c.companyName.toLowerCase().includes(q) ||
-           c.gstin.toLowerCase().includes(q) ||
-           (c.mobile || '').includes(q);
+    const name = (c.companyName || c.company_name || '').toLowerCase();
+    const gstin = (c.gstin || '').toLowerCase();
+    const mobile = (c.mobile || '').toLowerCase();
+    return name.includes(q) || gstin.includes(q) || mobile.includes(q);
   });
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.companyName.trim()) return;
     if (editId) {
-      await db.customers.update(editId, { ...form });
+      await updateCustomer(editId, { ...form });
     } else {
-      await db.customers.add({ ...form });
+      await saveCustomer({ ...form });
     }
     setForm({ companyName: '', gstin: '', address: '', mobile: '', email: '', website: '' });
     setShowForm(false);
@@ -54,7 +61,7 @@ export default function Customers() {
 
   const handleDelete = async (id) => {
     if (confirm('Delete this customer?')) {
-      await db.customers.delete(id);
+      await deleteCustomer(id);
       loadCustomers();
     }
   };
@@ -81,8 +88,8 @@ export default function Customers() {
               onChange={e => setSearch(e.target.value)}
             />
           </div>
-          <button className="btn btn-primary" onClick={() => { cancelForm(); setShowForm(true); }}>
-            <Plus size={16} /> Add Customer
+          <button className="btn btn-primary" onClick={() => { cancelForm(); setShowForm(true); }} style={{ gap: '12px' }}>
+            <Plus size={20} color="#22c55e" strokeWidth={3} /> <span style={{ fontWeight: 800 }}>Add Customer</span>
           </button>
         </div>
 
@@ -175,7 +182,10 @@ export default function Customers() {
           <div className="customer-grid">
             {filtered.map(c => (
               <div key={c.id} className="customer-card fade-in">
-                <h3><Building2 size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />{c.companyName}</h3>
+                <h3>
+                  <Building2 size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                  {c.companyName || c.company_name || 'Unnamed Company'}
+                </h3>
                 {c.gstin && <div className="detail"><Hash size={14} /><span>GSTIN: {c.gstin}</span></div>}
                 {c.address && <div className="detail"><MapPin size={14} /><span>{c.address}</span></div>}
                 {c.mobile && <div className="detail"><Phone size={14} /><span>{c.mobile}</span></div>}

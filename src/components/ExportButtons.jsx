@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { FileDown, Image, Printer, Share2, Save } from 'lucide-react';
-import html2canvas from 'html2canvas';
+import html2canvas from 'html2canvas-pro';
 import jsPDF from 'jspdf';
 
 export default function ExportButtons({ targetRef, filename = 'document', onExport, onSaveOnly }) {
@@ -8,13 +8,46 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
 
   const getCanvas = async () => {
     if (!targetRef.current) return null;
-    return html2canvas(targetRef.current, {
-      scale: 2,
-      useCORS: true,
-      backgroundColor: '#ffffff',
-      logging: false,
-    });
+    const el = targetRef.current;
+    
+    // Reset scroll to top to avoid offset issues with html2canvas
+    window.scrollTo(0, 0);
+
+    // Apply global capture class
+    document.body.classList.add('exporting-pdf');
+    
+    // Explicitly force A4 dimensions on the target element for the capture duration
+    const originalStyle = el.style.cssText;
+    el.style.width = '794px';
+    el.style.minHeight = '1123px';
+    el.style.margin = '0';
+    el.style.transform = 'none';
+
+    // Wait for the browser to apply styles and recalculate layout (2 frames + small delay)
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 150))));
+    
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 3, 
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        windowWidth: 794,
+        allowTaint: true,
+      });
+      
+      // Restore styles and cleanup
+      el.style.cssText = originalStyle;
+      document.body.classList.remove('exporting-pdf');
+      return canvas;
+    } catch (err) {
+      el.style.cssText = originalStyle;
+      document.body.classList.remove('exporting-pdf');
+      console.error('Capture error:', err);
+      return null;
+    }
   };
+
 
   const exportPDF = async (returnBlob = false) => {
     setExporting(true);
@@ -26,20 +59,16 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
       
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfW = pdf.internal.pageSize.getWidth(); // 210
-      const pdfH = pdf.internal.pageSize.getHeight(); // 297
       
       const imgW = canvas.width;
       const imgH = canvas.height;
       
-      // Calculate scale ratio to fit the entire canvas precisely into one A4 page
-      const ratio = Math.min(pdfW / imgW, pdfH / imgH);
+      // Force scaling strictly by width to avoid any horizontal gaps
+      const ratio = pdfW / imgW;
       const outputW = imgW * ratio;
       const outputH = imgH * ratio;
 
-      // Center it horizontally
-      const xOffset = (pdfW - outputW) / 2;
-
-      pdf.addImage(imgData, 'JPEG', xOffset, 0, outputW, outputH);
+      pdf.addImage(imgData, 'JPEG', 0, 0, outputW, outputH);
 
       if (returnBlob) {
         setExporting(false);
@@ -59,7 +88,25 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
     try {
       const canvas = await getCanvas();
       if (!canvas) { setExporting(false); return null; }
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.95);
+      
+      // Calculate A4 minimum height based on width (A4 ratio is ~1:1.4142)
+      const imgW = canvas.width;
+      const targetH = Math.max(canvas.height, imgW * 1.4142);
+      
+      // Create a consistently sized A4 canvas
+      const a4Canvas = document.createElement('canvas');
+      a4Canvas.width = imgW;
+      a4Canvas.height = targetH;
+      const ctx = a4Canvas.getContext('2d');
+      
+      // Fill white background
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, a4Canvas.width, a4Canvas.height);
+      
+      // Draw content at the top
+      ctx.drawImage(canvas, 0, 0);
+
+      const dataUrl = a4Canvas.toDataURL('image/jpeg', 0.98);
       
       if (returnBlob) {
         const res = await fetch(dataUrl);
@@ -106,7 +153,7 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
       }
       
       const file = new File([blob], `${filename}.${extension}`, { type: mimeType });
-      const msg = `Here is the document: ${filename}. Please attach the downloaded file.`;
+      const msg = '';
 
       // 1. Try Native Web Share API first. It attaches the file natively if supported!
       // This is the absolute best way to directly share a file to WhatsApp on devices that support it.

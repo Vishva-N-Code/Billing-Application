@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveProformaInvoice, deleteProformaInvoice, db } from '../db';
+import { COMPANY, getCompanyProfile, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveProformaInvoice, deleteProformaInvoice, updateProformaInvoice, db } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
+import CustomDateInput from '../components/CustomDateInput';
 
-export default function ProformaInvoice() {
+export default function ProformaInvoice({ exportItem }) {
   const previewRef = useRef(null);
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
@@ -16,15 +17,16 @@ export default function ProformaInvoice() {
     invoiceNo: '',
     clientCompany: '',
     clientAddress: '',
-    date: new Date().toISOString().split('T')[0],
     configs: [{
       tonType: '3 Ton',
       unitType: 'shifts',
       items: [{ date: '', description: '', timesheetNo: '', quantity: '', rate: '' }]
-    }]
+    }],
+    termsAndConditions: '',
   });
 
   const [signature, setSignature] = useState(null);
+  const [companyProfile, setCompanyProfile] = useState(COMPANY);
 
   const fetchSaved = async () => {
     const data = await db.proformaInvoices.toArray();
@@ -33,20 +35,29 @@ export default function ProformaInvoice() {
 
   useEffect(() => {
     const init = async () => {
+      const itemToLoad = exportItem || location.state?.loadItem;
+      if (itemToLoad) {
+        const pf = itemToLoad;
+        setForm({ ...pf.data.form, id: pf.id });
+        if (pf.data.signature) setSignature(pf.data.signature);
+        setActiveTab('preview');
+        
+        const profile = await getCompanyProfile();
+        if (profile) setCompanyProfile(profile);
+        return;
+      }
+
       await initSettings();
       const num = await getNextInvoiceNumber();
       setForm(f => ({ ...f, invoiceNo: num }));
       await fetchSaved();
 
-      if (location.state?.loadItem) {
-        const pf = location.state.loadItem;
-        setForm({ ...pf.data.form, id: pf.id });
-        if (pf.data.signature) setSignature(pf.data.signature);
-        setActiveTab('preview');
-      }
+      const profile = await getCompanyProfile();
+      setCompanyProfile(profile);
+      setForm(f => ({ ...f, termsAndConditions: '' }));
     };
     init();
-  }, [location.state]);
+  }, [location.state, exportItem]);
 
   const loadProforma = (pf) => {
     setForm({ ...pf.data.form, id: pf.id });
@@ -163,16 +174,15 @@ export default function ProformaInvoice() {
         <h1>Proforma Invoice</h1>
         <p>Create ton-based proforma invoices for your clients</p>
       </div>
-      <div className="page-body fade-in">
-        <div className="tab-bar">
-          <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Edit Form</button>
+      <div className="page-body">
+        <div className={`tab-bar ${activeTab === 'storage' ? 'storage-active' : ''}`}>
+          <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Details</button>
           <button className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>Preview</button>
-          <button className={`tab-btn ${activeTab === 'storage' ? 'active' : ''}`} onClick={() => setActiveTab('storage')}>Saved Docs</button>
         </div>
 
-        <div className="doc-preview-wrapper" style={{ alignItems: 'flex-start' }}>
+        <div className="doc-preview-wrapper" style={{ display: activeTab === 'storage' ? 'none' : undefined }}>
           {/* === FORM === */}
-          <div className="doc-form-panel" style={{ display: activeTab === 'preview' || activeTab === 'storage' ? 'none' : undefined }}>
+          <div className="doc-form-panel" style={{ display: activeTab === 'form' ? 'block' : 'none' }}>
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Document Options</div>
               <div className="form-group mb-0">
@@ -196,8 +206,7 @@ export default function ProformaInvoice() {
               </div>
               <div className="form-group">
                 <label>Date</label>
-                <input className="form-control" type="date"
-                  value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+                <CustomDateInput className="form-control" value={form.date} onChange={val => setForm({ ...form, date: val })} />
               </div>
               <div className="form-group">
                 <label>Invoice No.</label>
@@ -270,8 +279,8 @@ export default function ProformaInvoice() {
                           <th style={{ width: '120px' }}>Date</th>
                           <th>Description</th>
                           <th>Timesheet No</th>
-                          <th style={{ width: '80px' }}>{config.unitType === 'shifts' ? 'Shifts' : 'Hours'}</th>
-                          <th style={{ width: '100px' }}>Rate</th>
+                          <th style={{ width: '100px' }}>{config.unitType === 'shifts' ? 'Shifts' : 'Hours'}</th>
+                          <th style={{ width: '140px' }}>Rate</th>
                           <th style={{ width: '100px' }}>Amount</th>
                           <th style={{ width: '40px' }}></th>
                         </tr>
@@ -281,8 +290,7 @@ export default function ProformaInvoice() {
                           <tr key={itemIdx}>
                             <td>{itemIdx + 1}</td>
                             <td>
-                              <input className="form-control" type="date"
-                                value={item.date} onChange={e => updateItem(cfgIdx, itemIdx, 'date', e.target.value)} />
+                              <CustomDateInput className="form-control" value={item.date} onChange={val => updateItem(cfgIdx, itemIdx, 'date', val)} />
                             </td>
                             <td>
                               <textarea className="form-control" placeholder="Description" rows={2}
@@ -338,15 +346,24 @@ export default function ProformaInvoice() {
               </div>
             </div>
 
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Terms & Conditions</div>
+              <div className="form-group mb-0">
+                <textarea className="form-control" rows={3} placeholder="Add terms and conditions..."
+                  value={form.termsAndConditions} onChange={e => setForm({ ...form, termsAndConditions: e.target.value })} />
+              </div>
+            </div>
+
             <div className="card">
               <SignatureUpload signature={signature} onSignatureChange={setSignature} />
             </div>
           </div>
 
           {/* === PREVIEW === */}
-          <div className="doc-preview-panel" style={{ display: activeTab !== 'preview' ? 'none' : undefined }}>
-            <div ref={previewRef}>
-              {(() => {
+          <div className="doc-preview-panel" style={{ display: activeTab === 'preview' ? 'block' : 'none' }}>
+            <div className="doc-preview-container">
+              <div ref={previewRef} className="print-capture-wrap">
+                {(() => {
                 const printRows = [];
                 let globalItemIndex = 0;
                 form.configs?.forEach((config) => {
@@ -362,20 +379,20 @@ export default function ProformaInvoice() {
                   const pageRows = printRows.slice(pageIndex * 12, (pageIndex + 1) * 12);
                   const isLastPage = pageIndex === PAGES - 1;
                   return (
-            <div key={pageIndex} className="doc-preview" style={{ width: '794px', maxWidth: '100%', margin: '4px auto', padding: '4px', marginBottom: '20px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif', pageBreakAfter: 'always' }}>
+            <div key={pageIndex} className="doc-preview">
               <div className="doc-preview-inner">
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '4px' }}>
                   <div className="doc-header">
                     <img src="/logo.png" alt="Logo" className="logo-img" />
-                    <span className="company-title" style={{ fontSize: '1.5rem' }}>Om Saravana Cranes</span>
+                    <span className="company-title" style={{ fontSize: '1.5rem' }}>{companyProfile.name}</span>
                   </div>
-                  <div className="doc-subheader">{COMPANY.tagline}</div>
+                  <div className="doc-subheader">{companyProfile.tagline}</div>
                   <div className="doc-company-contacts">
-                    Email: {COMPANY.email} &nbsp;&nbsp; mobile: {COMPANY.mobile}
+                    Email: {companyProfile.email} &nbsp;&nbsp; mobile: {companyProfile.mobile}
                   </div>
                   <div className="doc-company-contacts">
-                    GST NUMBER: {COMPANY.gstin} &nbsp;&nbsp;&nbsp;&nbsp; Website: {COMPANY.website}
+                    GST NUMBER: {companyProfile.gstin} &nbsp;&nbsp;&nbsp;&nbsp; Website: {companyProfile.website}
                   </div>
                 </div>
 
@@ -404,13 +421,13 @@ export default function ProformaInvoice() {
                 <table className="doc-table" style={{ marginTop: '16px' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '40px' }}>S.No</th>
-                      <th style={{ width: '90px' }}>Date</th>
+                      <th style={{ width: '40px', textAlign: 'center' }}>S.No</th>
+                      <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
                       <th>Description</th>
-                      <th>Timesheet No</th>
-                      <th style={{ width: '70px' }}>Qty</th>
-                      <th style={{ width: '90px', textAlign: 'right' }}>Rate</th>
-                      <th style={{ width: '100px', textAlign: 'right' }}>Amount</th>
+                      <th style={{ width: '90px', textAlign: 'center' }}>Timesheet No</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
+                      <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
+                      <th style={{ width: '125px', textAlign: 'right' }}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -428,11 +445,11 @@ export default function ProformaInvoice() {
                       const item = row.item;
                       return (
                       <tr key={`i-${pageIndex}-${localIndex}`}>
-                        <td>{row.sno}</td>
-                        <td>{formatDate(item.date)}</td>
+                        <td style={{ textAlign: 'center' }}>{row.sno}</td>
+                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{formatDate(item.date)}</td>
                         <td>{item.description || '—'}</td>
-                        <td>{item.timesheetNo || '—'}</td>
-                        <td>{item.quantity || '—'}</td>
+                        <td style={{ textAlign: 'center' }}>{item.timesheetNo || '—'}</td>
+                        <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
                         <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(item.rate)}</span></div></td>
                         <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(calcAmount(item))}</span></div></td>
                       </tr>
@@ -450,12 +467,22 @@ export default function ProformaInvoice() {
                   * For Tax Invoice, applicable GST will be charged additionally.
                 </div>
 
+                {/* Terms and Conditions */}
+                {form.termsAndConditions && (
+                  <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
+                    <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
+                      {form.termsAndConditions}
+                    </div>
+                  </div>
+                )}
+
                 {/* Thank you & Regards + Signature */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '24px' }}>
                   <div>
                     <h4 style={{ color: '#c8952e', fontWeight: 700, fontSize: '0.85rem' }}>Thank you &amp; Regards</h4>
-                    <p style={{ fontWeight: 600, fontSize: '0.82rem', marginTop: '6px' }}>{COMPANY.owner}</p>
-                    <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{COMPANY.name}</p>
+                    <p style={{ fontWeight: 600, fontSize: '0.82rem', marginTop: '6px' }}>{companyProfile.owner}</p>
+                    <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{companyProfile.name}</p>
                   </div>
                   <div style={{ textAlign: 'center', minWidth: '140px' }}>
                     {signature && (
@@ -471,9 +498,9 @@ export default function ProformaInvoice() {
               );
               })})()}
             </div>
-
-            <ExportButtons targetRef={previewRef} filename={form.docName || `Proforma_Invoice_${form.clientCompany || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
           </div>
+          <ExportButtons targetRef={previewRef} filename={form.docName || `Proforma_Invoice_${form.clientCompany || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
+        </div>
 
           {/* === STORAGE === */}
           {activeTab === 'storage' && (
@@ -520,9 +547,6 @@ export default function ProformaInvoice() {
         </div>
 
         <style>{`
-          @media (min-width: 769px) {
-            .doc-form-panel, .doc-preview-panel { display: block !important; }
-          }
         `}</style>
       </div>
     </>

@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, db, saveQuotation, deleteQuotation } from '../db';
+import { COMPANY, db, saveQuotation, deleteQuotation, updateQuotation, getCompanyProfile, initSettings } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
+import CustomDateInput from '../components/CustomDateInput';
 
-export default function Quotation() {
+export default function Quotation({ exportItem }) {
   const previewRef = useRef(null);
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
@@ -19,6 +20,7 @@ export default function Quotation() {
     date: new Date().toISOString().split('T')[0],
     introText: 'We submit our lowest quotation for 3 ton Forklift for shift basis.',
     notes: ['GST 18% EXTRA.', 'Work will be initiated once PO Received.'],
+    termsAndConditions: '',
   });
 
   const [items, setItems] = useState([
@@ -26,6 +28,7 @@ export default function Quotation() {
   ]);
 
   const [signature, setSignature] = useState(null);
+  const [companyProfile, setCompanyProfile] = useState(COMPANY);
 
   const addItem = () => setItems([...items, { description: '', price: '' }]);
 
@@ -54,17 +57,28 @@ export default function Quotation() {
 
   useEffect(() => {
     const init = async () => {
-      fetchSaved();
-      if (location.state?.loadItem) {
-        const q = location.state.loadItem;
+      const itemToLoad = exportItem || location.state?.loadItem;
+      if (itemToLoad) {
+        const q = itemToLoad;
         setForm({ ...q.data.form, id: q.id });
         setItems(q.data.items);
         if (q.data.signature) setSignature(q.data.signature);
         setActiveTab('preview');
+        
+        const profile = await getCompanyProfile();
+        if (profile) setCompanyProfile(profile);
+        return;
       }
+
+      await initSettings();
+      fetchSaved();
+      
+      const profile = await getCompanyProfile();
+      setCompanyProfile(profile);
+      setForm(f => ({ ...f, termsAndConditions: '' }));
     };
     init();
-  }, [location.state]);
+  }, [location.state, exportItem]);
 
   const loadQuotation = (q) => {
     setForm({ ...q.data.form, id: q.id });
@@ -133,17 +147,15 @@ export default function Quotation() {
         <h1>Quotation</h1>
         <p>Create and export quotations for your clients</p>
       </div>
-      <div className="page-body fade-in">
-        {/* Mobile Tab Switcher */}
-        <div className="tab-bar">
-          <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Edit Form</button>
+      <div className="page-body">
+        <div className={`tab-bar ${activeTab === 'storage' ? 'storage-active' : ''}`}>
+          <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Details</button>
           <button className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>Preview</button>
-          <button className={`tab-btn ${activeTab === 'storage' ? 'active' : ''}`} onClick={() => setActiveTab('storage')}>Saved Docs</button>
         </div>
 
-        <div className="doc-preview-wrapper">
+        <div className="doc-preview-wrapper" style={{ display: activeTab === 'storage' ? 'none' : undefined }}>
           {/* === FORM PANEL === */}
-          <div className="doc-form-panel" style={{ display: activeTab === 'preview' || activeTab === 'storage' ? 'none' : undefined }}>
+          <div className="doc-form-panel" style={{ display: activeTab === 'form' ? 'block' : 'none' }}>
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Document Options</div>
               <div className="form-group mb-0">
@@ -172,8 +184,7 @@ export default function Quotation() {
               </div>
               <div className="form-group">
                 <label>Date</label>
-                <input className="form-control" type="date"
-                  value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+                <CustomDateInput className="form-control" value={form.date} onChange={val => setForm({ ...form, date: val })} />
               </div>
             </div>
 
@@ -237,119 +248,169 @@ export default function Quotation() {
               </button>
             </div>
 
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Terms & Conditions</div>
+              <div className="form-group mb-0">
+                <textarea className="form-control" rows={3} placeholder="Add terms and conditions..."
+                  value={form.termsAndConditions} onChange={e => setForm({ ...form, termsAndConditions: e.target.value })} />
+              </div>
+            </div>
+
             <div className="card">
               <SignatureUpload signature={signature} onSignatureChange={setSignature} />
             </div>
           </div>
 
           {/* === PREVIEW PANEL === */}
-          <div className="doc-preview-panel" style={{ display: activeTab !== 'preview' ? 'none' : undefined }}>
-            <div className="doc-preview" ref={previewRef} style={{ width: '794px', maxWidth: '100%', margin: '4px auto', padding: '4px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif' }}>
-              <div className="doc-preview-inner">
-                {/* Header */}
-                <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-                  <div className="doc-header">
-                    <img src="/logo.png" alt="Logo" className="logo-img" />
-                    <span className="company-title" style={{ fontSize: '1.5rem' }}>Om Saravana Cranes</span>
-                  </div>
-                  <div className="doc-subheader">{COMPANY.tagline}</div>
-                  <div className="doc-company-contacts">
-                    Email: {COMPANY.email} &nbsp;&nbsp; mobile: {COMPANY.mobile}
-                  </div>
-                  <div className="doc-company-contacts">
-                    GST NUMBER: {COMPANY.gstin} &nbsp;&nbsp;&nbsp;&nbsp; Website: {COMPANY.website}
-                  </div>
-                </div>
+          <div className="doc-preview-panel" style={{ display: activeTab === 'preview' ? 'block' : 'none' }}>
+            <div className="doc-preview-container">
+              <div ref={previewRef} className="print-capture-wrap">
+                {(() => {
+                  const itemsPerPage = 15;
+                  const totalPages = Math.ceil(Math.max(1, items.length) / itemsPerPage);
+                  
+                  return Array.from({ length: totalPages }, (_, pageIndex) => {
+                    const pageItems = items.slice(pageIndex * itemsPerPage, (pageIndex + 1) * itemsPerPage);
+                    const isFirstPage = pageIndex === 0;
+                    const isLastPage = pageIndex === totalPages - 1;
 
-                <hr className="doc-divider" />
+                    return (
+                      <div key={pageIndex} className="doc-preview">
+                        <div className="doc-preview-inner">
+                          {/* Header - Always on every page */}
+                          <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+                            <div className="doc-header">
+                              <img src="/logo.png" alt="Logo" className="logo-img" />
+                              <span className="company-title" style={{ fontSize: '1.5rem' }}>{companyProfile.name}</span>
+                            </div>
+                            <div className="doc-subheader">{companyProfile.tagline}</div>
+                            <div className="doc-company-contacts">
+                              Email: {companyProfile.email} &nbsp;&nbsp; mobile: {companyProfile.mobile}
+                            </div>
+                            <div className="doc-company-contacts">
+                              GST NUMBER: {companyProfile.gstin} &nbsp;&nbsp;&nbsp;&nbsp; Website: {companyProfile.website}
+                            </div>
+                          </div>
 
-                {/* QUOTATION title */}
-                <div className="invoice-title">QUOTATION</div>
+                          <hr className="doc-divider" />
 
-                {/* To & Date */}
-                <div className="quote-to-section">
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>TO:</div>
-                    <div style={{ paddingLeft: '20px', fontSize: '0.82rem' }}>
-                      {form.personInCharge && <div style={{ fontWeight: 600, marginBottom: '2px' }}>{form.personInCharge}</div>}
-                      <strong>{form.toCompany || '_______________'}</strong>
-                      <br />
-                      {(form.toAddress || '').split('\n').map((line, i) => (
-                        <span key={i}>{line}<br /></span>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.82rem' }}>
-                    <strong>Date: {formatDate(form.date)}</strong>
-                  </div>
-                </div>
+                          {/* QUOTATION title */}
+                          <div className="invoice-title">
+                            QUOTATION {totalPages > 1 && `(Page ${pageIndex + 1})`}
+                          </div>
 
-                <hr className="doc-divider-thin" />
+                          {/* To & Date - ONLY ON FIRST PAGE */}
+                          {isFirstPage && (
+                            <>
+                              <div className="quote-to-section">
+                                <div>
+                                  <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>TO:</div>
+                                  <div style={{ paddingLeft: '20px', fontSize: '0.82rem' }}>
+                                    {form.personInCharge && <div style={{ fontWeight: 600, marginBottom: '2px' }}>{form.personInCharge}</div>}
+                                    <strong>{form.toCompany || '_______________'}</strong>
+                                    <br />
+                                    {(form.toAddress || '').split('\n').map((line, i) => (
+                                      <span key={i}>{line}<br /></span>
+                                    ))}
+                                  </div>
+                                </div>
+                                <div style={{ fontSize: '0.82rem' }}>
+                                  <strong>Date: {formatDate(form.date)}</strong>
+                                </div>
+                              </div>
+                              <hr className="doc-divider-thin" />
+                              {/* Intro */}
+                              {form.introText && (
+                                <div className="quote-intro">{form.introText}</div>
+                              )}
+                            </>
+                          )}
 
-                {/* Intro */}
-                {form.introText && (
-                  <div className="quote-intro">{form.introText}</div>
-                )}
+                          {/* Items Table - Sliced for current page */}
+                          <table className="doc-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: '50px' }}>S.No</th>
+                                <th>Description</th>
+                                <th style={{ width: '160px', textAlign: 'right' }}>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pageItems.map((item, i) => (
+                                <tr key={i}>
+                                  <td>{pageIndex * itemsPerPage + i + 1}</td>
+                                  <td>{item.description || '—'}</td>
+                                  <td className="amount-col" style={{ boxSizing: 'border-box' }}>
+                                    {item.price ? (
+                                      <>
+                                        <span style={{ float: 'left' }}>Rs.</span>
+                                        <span style={{ float: 'right' }}>{formatCurrency(item.price)}</span>
+                                        <div style={{ clear: 'both' }} />
+                                      </>
+                                    ) : ''}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
 
-                {/* Items Table */}
-                <table className="doc-table">
-                  <thead>
-                    <tr>
-                      <th style={{ width: '40px' }}>S.No</th>
-                      <th>Description</th>
-                      <th style={{ width: '120px', textAlign: 'right' }}>Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item, i) => (
-                      <tr key={i}>
-                        <td>{i + 1}</td>
-                        <td>{item.description || '—'}</td>
-                        <td className="amount-col">
-                          {item.price ? <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(item.price)}</span></div> : ''}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                          {/* Footer Sections - ONLY ON LAST PAGE */}
+                          {isLastPage && (
+                            <>
+                              <hr className="doc-divider-thin" />
 
-                <hr className="doc-divider-thin" />
+                              {/* Notes */}
+                              {form.notes.length > 0 && (
+                                <div className="quote-note">
+                                  <h4>NOTE:</h4>
+                                  <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                                    {form.notes.filter(n => n).map((n, i) => (
+                                      <li key={i} style={{ fontWeight: 600 }}>{n}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              )}
 
-                {/* Notes */}
-                {form.notes.length > 0 && (
-                  <div className="quote-note">
-                    <h4>NOTE:</h4>
-                    <ul style={{ paddingLeft: '20px', margin: 0 }}>
-                      {form.notes.filter(n => n).map((n, i) => (
-                        <li key={i} style={{ fontWeight: 600 }}>{n}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
+                              {/* Terms and Conditions */}
+                              {form.termsAndConditions && (
+                                <div style={{ marginTop: '16px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
+                                  <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
+                                    {form.termsAndConditions}
+                                  </div>
+                                </div>
+                              )}
 
-                <hr className="doc-divider-thin" />
+                              <hr className="doc-divider-thin" />
 
-                {/* Closing */}
-                <div className="quote-closing">
-                  Kindly Consider our lowest Quotation for your valuable work
-                </div>
+                              {/* Closing */}
+                              <div className="quote-closing">
+                                Kindly Consider our lowest Quotation for your valuable work
+                              </div>
 
-                {/* Regards & Signature */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '16px' }}>
-                  <div className="quote-regards">
-                    <h4 style={{ color: '#c8952e', fontWeight: 700 }}>Thank you &amp; Regards</h4>
-                    <p style={{ marginTop: '6px', fontWeight: 600 }}>{COMPANY.owner}</p>
-                    <p style={{ fontWeight: 700 }}>{COMPANY.name}</p>
-                  </div>
-                  <div style={{ textAlign: 'center', minWidth: '140px' }}>
-                    {signature && (
-                      <>
-                        <img src={signature} alt="Signature" className="signature-img" />
-                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
-                      </>
-                    )}
-                  </div>
-                </div>
+                              {/* Regards & Signature */}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '16px' }}>
+                                <div className="quote-regards">
+                                  <h4 style={{ color: '#c8952e', fontWeight: 700 }}>Thank you &amp; Regards</h4>
+                                  <p style={{ marginTop: '6px', fontWeight: 600 }}>{companyProfile.owner}</p>
+                                  <p style={{ fontWeight: 700 }}>{companyProfile.name}</p>
+                                </div>
+                                <div style={{ textAlign: 'center', minWidth: '140px' }}>
+                                  {signature && (
+                                    <>
+                                      <img src={signature} alt="Signature" className="signature-img" />
+                                      <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
 
@@ -376,7 +437,7 @@ export default function Quotation() {
                         <tr key={q.id}>
                           <td>{formatDate(q.date)}</td>
                           <td><strong>{q.docName}</strong></td>
-                          <td>{q.clientCompany}</td>
+                          <td>{q.toCompany || q.clientCompany}</td>
                           <td>
                             <div style={{ display: 'flex', gap: '6px' }}>
                               <button className="btn btn-sm btn-secondary" onClick={() => loadQuotation(q)}>Edit / View</button>
@@ -396,13 +457,8 @@ export default function Quotation() {
           )}
         </div>
 
-        {/* Mobile: show both tabs content via CSS but controlled by state */}
+        {/* Mobile Control Styles */}
         <style>{`
-          @media (min-width: 769px) {
-            .doc-form-panel, .doc-preview-panel {
-              display: block !important;
-            }
-          }
         `}</style>
       </div>
     </>

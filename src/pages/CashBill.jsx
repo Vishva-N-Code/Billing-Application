@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, getNextCashBillNumber, updateCashBillCounter, initSettings, saveCashBill, deleteCashBill, db } from '../db';
+import { COMPANY, getCompanyProfile, getNextCashBillNumber, updateCashBillCounter, initSettings, saveCashBill, deleteCashBill, updateCashBill, db } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
+import CustomDateInput from '../components/CustomDateInput';
 
-export default function CashBill() {
+export default function CashBill({ exportItem }) {
   const previewRef = useRef(null);
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
@@ -17,13 +18,15 @@ export default function CashBill() {
     clientCompany: '',
     clientAddress: '',
     date: new Date().toISOString().split('T')[0],
+    termsAndConditions: '',
   });
 
   const [items, setItems] = useState([
-    { date: '', description: '', rate: '', amount: '' }
+    { date: '', description: '', quantity: '', rate: '', amount: '' }
   ]);
 
   const [signature, setSignature] = useState(null);
+  const [companyProfile, setCompanyProfile] = useState(COMPANY);
 
   const fetchSaved = async () => {
     const data = await db.cashbills.toArray();
@@ -32,21 +35,30 @@ export default function CashBill() {
 
   useEffect(() => {
     const init = async () => {
+      const itemToLoad = exportItem || location.state?.loadItem;
+      if (itemToLoad) {
+        const bill = itemToLoad;
+        setForm({ ...bill.data.form, id: bill.id });
+        setItems(bill.data.items);
+        if (bill.data.signature) setSignature(bill.data.signature);
+        setActiveTab('preview');
+        
+        const profile = await getCompanyProfile();
+        if (profile) setCompanyProfile(profile);
+        return;
+      }
+
       await initSettings();
       const num = await getNextCashBillNumber();
       setForm(f => ({ ...f, billNo: num }));
       await fetchSaved();
 
-      if (location.state?.loadItem) {
-        const bill = location.state.loadItem;
-        setForm({ ...bill.data.form, id: bill.id });
-        setItems(bill.data.items);
-        if (bill.data.signature) setSignature(bill.data.signature);
-        setActiveTab('preview');
-      }
+      const profile = await getCompanyProfile();
+      setCompanyProfile(profile);
+      setForm(f => ({ ...f, termsAndConditions: '' }));
     };
     init();
-  }, [location.state]);
+  }, [location.state, exportItem]);
 
   const loadBill = (bill) => {
     setForm({ ...bill.data.form, id: bill.id });
@@ -62,7 +74,7 @@ export default function CashBill() {
     }
   };
 
-  const addItem = () => setItems([...items, { date: '', description: '', rate: '', amount: '' }]);
+  const addItem = () => setItems([...items, { date: '', description: '', quantity: '', rate: '', amount: '' }]);
   const removeItem = (i) => { if (items.length > 1) setItems(items.filter((_, idx) => idx !== i)); };
   
   const updateItem = (i, field, value) => {
@@ -72,11 +84,12 @@ export default function CashBill() {
   };
 
   const calcAmount = (item) => {
-    if (item.amount !== undefined && item.amount !== '') {
+    if (item.amount !== undefined && item.amount !== '' && item.amount !== 0) {
       return parseFloat(item.amount) || 0;
     }
     const rate = parseFloat(item.rate) || 0;
-    return rate;
+    const qty = parseFloat(item.quantity) || 0;
+    return rate * qty;
   };
 
   const grandTotal = items.reduce((sum, item) => sum + calcAmount(item), 0);
@@ -140,16 +153,15 @@ export default function CashBill() {
         <h1>Cash Bill</h1>
         <p>Create and print cash bills for immediate payments</p>
       </div>
-      <div className="page-body fade-in">
-        <div className="tab-bar">
-          <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Edit Form</button>
+      <div className="page-body">
+        <div className={`tab-bar ${activeTab === 'storage' ? 'storage-active' : ''}`}>
+          <button className={`tab-btn ${activeTab === 'form' ? 'active' : ''}`} onClick={() => setActiveTab('form')}>Details</button>
           <button className={`tab-btn ${activeTab === 'preview' ? 'active' : ''}`} onClick={() => setActiveTab('preview')}>Preview</button>
-          <button className={`tab-btn ${activeTab === 'storage' ? 'active' : ''}`} onClick={() => setActiveTab('storage')}>Saved Docs</button>
         </div>
 
-        <div className="doc-preview-wrapper">
+        <div className="doc-preview-wrapper" style={{ display: activeTab === 'storage' ? 'none' : undefined }}>
           {/* === FORM === */}
-          <div className="doc-form-panel" style={{ display: activeTab === 'preview' || activeTab === 'storage' ? 'none' : undefined }}>
+          <div className="doc-form-panel" style={{ display: activeTab === 'form' ? 'block' : 'none' }}>
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Document Options</div>
               <div className="form-group mb-0">
@@ -173,8 +185,7 @@ export default function CashBill() {
               </div>
               <div className="form-group">
                 <label>Date</label>
-                <input className="form-control" type="date"
-                  value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+                <CustomDateInput className="form-control" value={form.date} onChange={val => setForm({ ...form, date: val })} />
               </div>
               <div className="form-group">
                 <label>Cash Bill No.</label>
@@ -189,25 +200,29 @@ export default function CashBill() {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th style={{ width: '40px' }}>S.No</th>
+                      <th style={{ width: '40px', textAlign: 'center' }}>S.No</th>
                       <th style={{ width: '120px' }}>Date</th>
                       <th>Description</th>
-                      <th style={{ width: '100px' }}>Rate</th>
-                      <th style={{ width: '100px' }}>Amount</th>
+                      <th style={{ width: '80px', textAlign: 'center' }}>Qty</th>
+                      <th style={{ width: '120px' }}>Rate</th>
+                      <th style={{ width: '110px' }}>Amount</th>
                       <th style={{ width: '40px' }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item, i) => (
                       <tr key={i}>
-                        <td>{i + 1}</td>
+                        <td style={{ textAlign: 'center' }}>{i + 1}</td>
                         <td>
-                          <input className="form-control" type="date"
-                            value={item.date} onChange={e => updateItem(i, 'date', e.target.value)} />
+                          <CustomDateInput className="form-control" value={item.date} onChange={val => updateItem(i, 'date', val)} />
                         </td>
                         <td>
                           <textarea className="form-control" placeholder="Description" rows={2}
                             value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} />
+                        </td>
+                        <td>
+                          <input className="form-control" type="number" placeholder="0" style={{ textAlign: 'center' }}
+                            value={item.quantity} onChange={e => updateItem(i, 'quantity', e.target.value)} />
                         </td>
                         <td>
                           <input className="form-control" type="number" placeholder="0"
@@ -218,7 +233,7 @@ export default function CashBill() {
                             <span style={{ fontSize: '0.85rem', marginRight: '4px', fontWeight: 600 }}>Rs.</span>
                             <input className="form-control" type="number" placeholder="0"
                               style={{ minWidth: '80px', flex: 1, fontWeight: 600 }}
-                              value={item.amount !== undefined ? item.amount : calcAmount(item)}
+                              value={item.amount || calcAmount(item)}
                               onChange={e => updateItem(i, 'amount', e.target.value)} />
                           </div>
                         </td>
@@ -235,32 +250,41 @@ export default function CashBill() {
               </button>
             </div>
 
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Terms & Conditions</div>
+              <div className="form-group mb-0">
+                <textarea className="form-control" rows={3} placeholder="Add terms and conditions..."
+                  value={form.termsAndConditions} onChange={e => setForm({ ...form, termsAndConditions: e.target.value })} />
+              </div>
+            </div>
+
             <div className="card">
               <SignatureUpload signature={signature} onSignatureChange={setSignature} />
             </div>
           </div>
 
           {/* === PREVIEW === */}
-          <div className="doc-preview-panel" style={{ display: activeTab !== 'preview' ? 'none' : undefined }}>
-            <div ref={previewRef}>
-              {Array.from({ length: Math.ceil(Math.max(1, items.length) / 12) }, (_, pageIndex) => {
+          <div className="doc-preview-panel" style={{ display: activeTab === 'preview' ? 'block' : 'none' }}>
+            <div className="doc-preview-container">
+              <div ref={previewRef} className="print-capture-wrap">
+                {Array.from({ length: Math.ceil(Math.max(1, items.length) / 12) }, (_, pageIndex) => {
                 const pageItems = items.slice(pageIndex * 12, (pageIndex + 1) * 12);
                 const isLastPage = pageIndex === Math.ceil(Math.max(1, items.length) / 12) - 1;
                 return (
-            <div key={pageIndex} className="doc-preview" style={{ width: '794px', maxWidth: '100%', margin: '4px auto', padding: '4px', marginBottom: '20px', boxSizing: 'border-box', fontFamily: 'Arial, sans-serif', pageBreakAfter: 'always' }}>
+            <div key={pageIndex} className="doc-preview">
               <div className="doc-preview-inner">
                 {/* Header */}
                 <div style={{ textAlign: 'center', marginBottom: '4px' }}>
                   <div className="doc-header">
                     <img src="/logo.png" alt="Logo" className="logo-img" />
-                    <span className="company-title" style={{ fontSize: '1.5rem' }}>Om Saravana Cranes</span>
+                    <span className="company-title" style={{ fontSize: '1.5rem' }}>{companyProfile.name}</span>
                   </div>
-                  <div className="doc-subheader">{COMPANY.tagline}</div>
+                  <div className="doc-subheader">{companyProfile.tagline}</div>
                   <div className="doc-company-contacts">
-                    Email: {COMPANY.email} &nbsp;&nbsp; mobile: {COMPANY.mobile}
+                    Email: {companyProfile.email} &nbsp;&nbsp; mobile: {companyProfile.mobile}
                   </div>
                   <div className="doc-company-contacts">
-                    GST NUMBER: {COMPANY.gstin} &nbsp;&nbsp;&nbsp;&nbsp; Website: {COMPANY.website}
+                    GST NUMBER: {companyProfile.gstin} &nbsp;&nbsp;&nbsp;&nbsp; Website: {companyProfile.website}
                   </div>
                 </div>
 
@@ -286,14 +310,15 @@ export default function CashBill() {
                 </div>
 
                 {/* Table */}
-                <table className="doc-table">
+                <table className="doc-table" style={{ tableLayout: 'fixed', width: '100%' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '40px' }}>S.No</th>
-                      <th style={{ width: '90px' }}>Date</th>
+                      <th style={{ width: '45px', textAlign: 'center' }}>S.No</th>
+                      <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
                       <th>Description</th>
-                      <th style={{ width: '90px', textAlign: 'right' }}>Rate</th>
-                      <th style={{ width: '100px', textAlign: 'right' }}>Amount</th>
+                      <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
+                      <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
+                      <th style={{ width: '130px', textAlign: 'right' }}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -301,28 +326,51 @@ export default function CashBill() {
                       const absoluteIndex = pageIndex * 12 + localIndex;
                       return (
                       <tr key={absoluteIndex}>
-                        <td>{absoluteIndex + 1}</td>
-                        <td>{formatDate(item.date)}</td>
+                        <td style={{ textAlign: 'center' }}>{absoluteIndex + 1}</td>
+                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{formatDate(item.date)}</td>
                         <td>{item.description || '—'}</td>
-                        <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(item.rate)}</span></div></td>
-                        <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(calcAmount(item))}</span></div></td>
+                        <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
+                        <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
+                          <span style={{ float: 'left' }}>Rs.</span>
+                          <span style={{ float: 'right' }}>{formatCurrency(item.rate)}</span>
+                          <div style={{ clear: 'both' }} />
+                        </td>
+                        <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
+                          <span style={{ float: 'left' }}>Rs.</span>
+                          <span style={{ float: 'right' }}>{formatCurrency(calcAmount(item))}</span>
+                          <div style={{ clear: 'both' }} />
+                        </td>
                       </tr>
                     )})}
                     {isLastPage && (
                       <tr style={{ fontWeight: 700, background: '#f9f9f9' }}>
-                        <td colSpan={4} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
-                        <td className="amount-col" style={{ fontWeight: 800 }}><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(grandTotal)}</span></div></td>
+                        <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, padding: '8px' }}>TOTAL</td>
+                        <td className="amount-col" style={{ fontWeight: 800, padding: '8px', boxSizing: 'border-box' }}>
+                          <span style={{ float: 'left' }}>Rs.</span>
+                          <span style={{ float: 'right' }}>{formatCurrency(grandTotal)}</span>
+                          <div style={{ clear: 'both' }} />
+                        </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
 
+                {/* Terms and Conditions */}
+                {form.termsAndConditions && (
+                  <div style={{ marginTop: '16px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
+                    <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
+                      {form.termsAndConditions}
+                    </div>
+                  </div>
+                )}
+
                 {/* Thank you & Regards + Signature */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '32px' }}>
                   <div>
                     <h4 style={{ color: '#c8952e', fontWeight: 700, fontSize: '0.85rem' }}>Thank you &amp; Regards</h4>
-                    <p style={{ fontWeight: 600, fontSize: '0.82rem', marginTop: '6px' }}>{COMPANY.owner}</p>
-                    <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{COMPANY.name}</p>
+                    <p style={{ fontWeight: 600, fontSize: '0.82rem', marginTop: '6px' }}>{companyProfile.owner}</p>
+                    <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{companyProfile.name}</p>
                   </div>
                   <div style={{ textAlign: 'center', minWidth: '140px' }}>
                     {signature && (
@@ -337,9 +385,9 @@ export default function CashBill() {
             </div>
               )})}
             </div>
-
-            <ExportButtons targetRef={previewRef} filename={form.docName || `Cash_Bill_${form.billNo || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
           </div>
+          <ExportButtons targetRef={previewRef} filename={form.docName || `Cash_Bill_${form.billNo || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
+        </div>
 
           {/* === STORAGE === */}
           {activeTab === 'storage' && (
@@ -386,9 +434,6 @@ export default function CashBill() {
         </div>
 
         <style>{`
-          @media (min-width: 769px) {
-            .doc-form-panel, .doc-preview-panel { display: block !important; }
-          }
         `}</style>
       </div>
     </>
