@@ -29,6 +29,9 @@ export default function VehicleDetails() {
 
   useEffect(() => {
     loadSections();
+    const handleSyncComplete = () => loadSections();
+    window.addEventListener('sync-complete', handleSyncComplete);
+    return () => window.removeEventListener('sync-complete', handleSyncComplete);
   }, [loadSections]);
 
   // ── Section-level actions ─────────────────────────────────────

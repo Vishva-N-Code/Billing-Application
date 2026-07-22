@@ -17,7 +17,12 @@ export default function Customers() {
   const [ledgerDocs, setLedgerDocs] = useState([]);
   const [ledgerStats, setLedgerStats] = useState({ totalBilled: 0, totalPaid: 0, balanceDue: 0 });
 
-  useEffect(() => { loadCustomers(); }, []);
+  useEffect(() => {
+    loadCustomers();
+    const handleSyncComplete = () => loadCustomers();
+    window.addEventListener('sync-complete', handleSyncComplete);
+    return () => window.removeEventListener('sync-complete', handleSyncComplete);
+  }, []);
 
   const loadCustomers = async () => {
     try {

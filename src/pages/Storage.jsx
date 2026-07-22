@@ -47,6 +47,11 @@ export default function Storage() {
 
   useEffect(() => {
     fetchData();
+    const handleSyncComplete = () => {
+      fetchData();
+    };
+    window.addEventListener('sync-complete', handleSyncComplete);
+    return () => window.removeEventListener('sync-complete', handleSyncComplete);
   }, []);
 
   const formatDate = (dateStr) => {
