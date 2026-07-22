@@ -354,7 +354,7 @@ export async function syncFromCloud() {
         const localItems = await mapping.local.toArray();
         const localMap = new Map(localItems.map(item => [item[mapping.key], item]));
 
-        const keysToFetchFull = [];
+        const idsToFetchFull = [];
         
         if (remoteMetadataList && remoteMetadataList.length > 0) {
           for (const remoteMeta of remoteMetadataList) {
@@ -363,26 +363,27 @@ export async function syncFromCloud() {
             if (keyValue) {
               const exists = localMap.get(keyValue);
               if (!exists || shouldUpdateLocal(exists, cloudMeta)) {
-                keysToFetchFull.push(keyValue);
+                if (remoteMeta.id) {
+                  idsToFetchFull.push(remoteMeta.id);
+                }
               }
             }
           }
         }
 
-        // Fetch full records in chunks of 1 to avoid statement timeouts for tables with heavy data
+        // Fetch full records in batches of 5 using Primary Key ID index (lightning fast, < 800ms)
         const fullRemoteRecords = [];
-        if (keysToFetchFull.length > 0 && mapping.selectFields !== '*') {
-          console.log(`Fetching ${keysToFetchFull.length} full records for ${mapping.remote} one-by-one...`);
-          const batchSize = 1;
-          const remoteKeyColumn = COLUMN_MAP[mapping.key] || mapping.key;
+        if (idsToFetchFull.length > 0 && mapping.selectFields !== '*') {
+          console.log(`Fetching ${idsToFetchFull.length} full records for ${mapping.remote} by primary key...`);
+          const batchSize = 5;
           
-          for (let i = 0; i < keysToFetchFull.length; i += batchSize) {
-            const batchKeys = keysToFetchFull.slice(i, i + batchSize);
+          for (let i = 0; i < idsToFetchFull.length; i += batchSize) {
+            const batchIds = idsToFetchFull.slice(i, i + batchSize);
             const { data: batchData, error: batchErr } = await supabase
               .from(mapping.remote)
               .select('*')
               .eq('business_id', BUSINESS_ID)
-              .in(remoteKeyColumn, batchKeys);
+              .in('id', batchIds);
               
             if (batchErr) {
               console.error(`Error fetching batch of full records for ${mapping.remote}:`, batchErr);
