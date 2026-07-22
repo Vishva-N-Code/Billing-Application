@@ -77,6 +77,45 @@ db.version(11).stores({
   purchaseBills: '++id, name, date, monthYear, dataUrl, type, uploadedAt'
 });
 
+// Version 12: Guaranteed one-time seed migration. Every browser on an older
+// DB version will run this upgrade EXACTLY ONCE, populating documents immediately.
+import seedData from './data/seedInvoices.json';
+db.version(12).stores({
+  customers: '++id, companyName, gstin, address, mobile, email, website, vendorCode',
+  settings: 'key',
+  invoices: '++id, invoiceNo, docName, date, clientCompany, grandTotal, paymentStatus, data',
+  cashbills: '++id, billNo, docName, date, clientCompany, grandTotal, paymentStatus, data',
+  deliveryChellans: '++id, dcNo, docName, date, clientCompany, data',
+  quotations: '++id, docName, date, clientCompany, data',
+  proformaInvoices: '++id, invoiceNo, docName, date, clientCompany, grandTotal, data',
+  vehicleDetails: '++id, sectionName, order',
+  mediaLibrary: '++id, name, type, category, uploadedAt',
+  experienceCertificates: '++id, docName, driverName, date, data',
+  purchaseBills: '++id, name, date, monthYear, dataUrl, type, uploadedAt'
+}).upgrade(async tx => {
+  try {
+    const existingInvoices = await tx.table('invoices').toArray();
+    const hasRealInvoices = existingInvoices.some(i => i.clientCompany && i.clientCompany.trim() !== '' && i.grandTotal > 0);
+    if (!hasRealInvoices && seedData && seedData.invoices && seedData.invoices.length > 0) {
+      console.log(`[DB v12 upgrade] Seeding ${seedData.invoices.length} invoices...`);
+      // Clear any empty/draft stubs first
+      const emptyIds = existingInvoices.filter(i => !i.clientCompany || i.grandTotal === 0).map(i => i.id);
+      if (emptyIds.length > 0) await tx.table('invoices').bulkDelete(emptyIds);
+      // Seed real documents (strip id so auto-increment assigns fresh keys)
+      const strip = arr => arr.map(({ id, ...rest }) => rest);
+      await tx.table('invoices').bulkAdd(strip(seedData.invoices));
+      if (seedData.cashbills && seedData.cashbills.length > 0) {
+        await tx.table('cashbills').bulkAdd(strip(seedData.cashbills));
+      }
+      if (seedData.dcs && seedData.dcs.length > 0) {
+        await tx.table('deliveryChellans').bulkAdd(strip(seedData.dcs));
+      }
+    }
+  } catch (e) {
+    console.error('[DB v12 upgrade] Seed error:', e);
+  }
+});
+
 // Company info constant
 export const COMPANY = {
   name: 'OM SARAVANA CRANES',
@@ -110,13 +149,14 @@ export async function initSettings() {
   try {
     // 1. Immediate Seed Check: Ensures documents display instantly on any new device/browser
     try {
-      const invCount = await db.invoices.count();
-      if (invCount === 0 && seedInvoices && seedInvoices.invoices) {
+      const allInvoices = await db.invoices.toArray();
+      const validInvoices = allInvoices.filter(i => i.clientCompany && i.clientCompany.trim() !== '');
+      if (validInvoices.length === 0 && seedInvoices && seedInvoices.invoices) {
         console.log(`Seeding ${seedInvoices.invoices.length} documents into local Dexie DB...`);
-        const clean = (arr) => arr ? arr.map(({ id, ...rest }) => rest) : [];
-        if (seedInvoices.invoices.length > 0) await db.invoices.bulkPut(clean(seedInvoices.invoices));
-        if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) await db.cashbills.bulkPut(clean(seedInvoices.cashbills));
-        if (seedInvoices.dcs && seedInvoices.dcs.length > 0) await db.deliveryChellans.bulkPut(clean(seedInvoices.dcs));
+        const cleanWithId = (arr) => arr ? arr.map(({ id, ...rest }, idx) => ({ id: idx + 1, ...rest })) : [];
+        if (seedInvoices.invoices.length > 0) await db.invoices.bulkPut(cleanWithId(seedInvoices.invoices));
+        if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) await db.cashbills.bulkPut(cleanWithId(seedInvoices.cashbills));
+        if (seedInvoices.dcs && seedInvoices.dcs.length > 0) await db.deliveryChellans.bulkPut(cleanWithId(seedInvoices.dcs));
         window.dispatchEvent(new CustomEvent('sync-complete'));
       }
     } catch (seedErr) {
