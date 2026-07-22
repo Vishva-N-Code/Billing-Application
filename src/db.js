@@ -108,6 +108,21 @@ import seedInvoices from './data/seedInvoices.json';
 
 export async function initSettings() {
   try {
+    // 1. Immediate Seed Check: Ensures documents display instantly on any new device/browser
+    try {
+      const invCount = await db.invoices.count();
+      if (invCount === 0 && seedInvoices && seedInvoices.invoices) {
+        console.log(`Seeding ${seedInvoices.invoices.length} documents into local Dexie DB...`);
+        const clean = (arr) => arr ? arr.map(({ id, ...rest }) => rest) : [];
+        if (seedInvoices.invoices.length > 0) await db.invoices.bulkPut(clean(seedInvoices.invoices));
+        if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) await db.cashbills.bulkPut(clean(seedInvoices.cashbills));
+        if (seedInvoices.dcs && seedInvoices.dcs.length > 0) await db.deliveryChellans.bulkPut(clean(seedInvoices.dcs));
+        window.dispatchEvent(new CustomEvent('sync-complete'));
+      }
+    } catch (seedErr) {
+      console.error('Initial seed error:', seedErr);
+    }
+
     const [invoiceCounter, cashBillCounter, dcCounter, vehicleSectionCount, existingProfile, didSweep] = await Promise.all([
       db.settings.get('invoiceCounter'),
       db.settings.get('cashBillCounter'),
@@ -138,26 +153,6 @@ export async function initSettings() {
     }
 
     await Promise.all(operations);
-
-    // Initial fallback seed so documents immediately display on any new browser/device
-    const localInvoiceCount = await db.invoices.count();
-    if (localInvoiceCount === 0 && seedInvoices) {
-      console.log('Seeding initial documents into local database...');
-      try {
-        const clean = (arr) => arr ? arr.map(({ id, ...rest }) => rest) : [];
-        if (seedInvoices.invoices && seedInvoices.invoices.length > 0) {
-          await db.invoices.bulkPut(clean(seedInvoices.invoices));
-        }
-        if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) {
-          await db.cashbills.bulkPut(clean(seedInvoices.cashbills));
-        }
-        if (seedInvoices.dcs && seedInvoices.dcs.length > 0) {
-          await db.deliveryChellans.bulkPut(clean(seedInvoices.dcs));
-        }
-      } catch (seedErr) {
-        console.error('Seeding exception:', seedErr);
-      }
-    }
 
     const allCust = await db.customers.toArray();
     const custUpdateOps = [];
