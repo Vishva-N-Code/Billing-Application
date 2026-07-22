@@ -17,7 +17,7 @@ import Reports from './pages/Reports';
 import ExperienceCertificate from './pages/ExperienceCertificate';
 import PurchaseBill from './pages/PurchaseBill';
 import UpdatePrompt from './components/UpdatePrompt';
-import { syncFromCloud } from './db';
+import { syncFromCloud, initSettings } from './db';
 import './index.css';
 
 
@@ -74,6 +74,7 @@ function App() {
 
   useEffect(() => {
     async function initSync() {
+      await initSettings();
       await syncFromCloud();
     }
     initSync();
