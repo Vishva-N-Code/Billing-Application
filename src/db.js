@@ -290,6 +290,20 @@ export async function removeFromCloud(tableName, query) {
   }
 }
 
+async function fetchWithRetry(queryFn, maxRetries = 3, delayMs = 1500) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await queryFn();
+      if (!res.error) return res;
+      if (i === maxRetries - 1) return res;
+    } catch (err) {
+      if (i === maxRetries - 1) return { data: null, error: err };
+    }
+    await new Promise(r => setTimeout(r, delayMs * (i + 1)));
+  }
+  return { data: null, error: new Error('Max retries exceeded') };
+}
+
 export async function syncFromCloud() {
   if (typeof window !== 'undefined' && !window.navigator.onLine) {
     console.log('--- Sync system PAUSED (Offline) ---');
@@ -328,20 +342,18 @@ export async function syncFromCloud() {
       return false;
     };
 
-    // Fetch all tables metadata and settings from Supabase in parallel
+    // Fetch all tables metadata and settings from Supabase in parallel with automatic retries
     const [syncResults, settsResult] = await Promise.all([
       Promise.all(tableMappings.map(async (mapping) => {
-        try {
-          const { data, error } = await supabase
+        const { data, error } = await fetchWithRetry(() =>
+          supabase
             .from(mapping.remote)
             .select(mapping.selectFields)
-            .eq('business_id', BUSINESS_ID);
-          return { mapping, data, error };
-        } catch (err) {
-          return { mapping, data: null, error: err };
-        }
+            .eq('business_id', BUSINESS_ID)
+        );
+        return { mapping, data, error };
       })),
-      supabase.from('settings').select('*').eq('business_id', BUSINESS_ID)
+      fetchWithRetry(() => supabase.from('settings').select('*').eq('business_id', BUSINESS_ID))
     ]);
 
     // Process all sync mappings concurrently
@@ -371,7 +383,7 @@ export async function syncFromCloud() {
           }
         }
 
-        // Fetch full records in batches of 5 using Primary Key ID index (lightning fast, < 800ms)
+        // Fetch full records in batches of 5 using Primary Key ID index (lightning fast, < 800ms) with retries
         const fullRemoteRecords = [];
         if (idsToFetchFull.length > 0 && mapping.selectFields !== '*') {
           console.log(`Fetching ${idsToFetchFull.length} full records for ${mapping.remote} by primary key...`);
@@ -379,11 +391,13 @@ export async function syncFromCloud() {
           
           for (let i = 0; i < idsToFetchFull.length; i += batchSize) {
             const batchIds = idsToFetchFull.slice(i, i + batchSize);
-            const { data: batchData, error: batchErr } = await supabase
-              .from(mapping.remote)
-              .select('*')
-              .eq('business_id', BUSINESS_ID)
-              .in('id', batchIds);
+            const { data: batchData, error: batchErr } = await fetchWithRetry(() =>
+              supabase
+                .from(mapping.remote)
+                .select('*')
+                .eq('business_id', BUSINESS_ID)
+                .in('id', batchIds)
+            );
               
             if (batchErr) {
               console.error(`Error fetching batch of full records for ${mapping.remote}:`, batchErr);
