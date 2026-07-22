@@ -104,6 +104,8 @@ const DEFAULT_VEHICLE_SECTIONS = [
   { sectionName: 'TRANSPORT', order: 6, vehicles: [{ name: 'Vehicle 1', regNo: '', chassisNo: '', value: '' }] }
 ];
 
+import seedInvoices from './data/seedInvoices.json';
+
 export async function initSettings() {
   try {
     const [invoiceCounter, cashBillCounter, dcCounter, vehicleSectionCount, existingProfile, didSweep] = await Promise.all([
@@ -136,6 +138,21 @@ export async function initSettings() {
     }
 
     await Promise.all(operations);
+
+    // Initial fallback seed so documents immediately display on any new browser/device
+    const localInvoiceCount = await db.invoices.count();
+    if (localInvoiceCount === 0 && seedInvoices) {
+      console.log('Seeding initial documents into local database...');
+      if (seedInvoices.invoices && seedInvoices.invoices.length > 0) {
+        await db.invoices.bulkAdd(seedInvoices.invoices);
+      }
+      if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) {
+        await db.cashbills.bulkAdd(seedInvoices.cashbills);
+      }
+      if (seedInvoices.dcs && seedInvoices.dcs.length > 0) {
+        await db.deliveryChellans.bulkAdd(seedInvoices.dcs);
+      }
+    }
 
     const allCust = await db.customers.toArray();
     const custUpdateOps = [];

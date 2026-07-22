@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db, deleteInvoice, deleteQuotation, deleteProformaInvoice, deleteCashBill, deleteDc, updatePaymentStatus, deleteExperienceCertificate } from '../db';
+import { db, syncFromCloud, deleteInvoice, deleteQuotation, deleteProformaInvoice, deleteCashBill, deleteDc, updatePaymentStatus, deleteExperienceCertificate } from '../db';
 import { Trash2, ExternalLink, Search, Download, Loader2, FolderOpen, Coins, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
 import TaxInvoice from './TaxInvoice';
 import Quotation from './Quotation';
@@ -47,6 +47,9 @@ export default function Storage() {
 
   useEffect(() => {
     fetchData();
+    // Trigger cloud sync immediately on mount so documents are downloaded from Supabase
+    syncFromCloud();
+
     const handleSyncComplete = () => {
       fetchData();
     };

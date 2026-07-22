@@ -1,0 +1,491 @@
+{
+  "invoices": [
+    {
+      "invoiceNo": "081",
+      "docName": "ECI - 081",
+      "date": "2026-05-09",
+      "clientCompany": "ECI DISPLAY INDIA PVT LTD",
+      "grandTotal": 7080,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "090",
+      "docName": "Tax Invoice 090",
+      "date": "2026-06-01",
+      "clientCompany": "INDIAN POWER PRESS ENGINEERS",
+      "grandTotal": 57820,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "084",
+      "docName": "Tax Invoice 084",
+      "date": "2026-05-11",
+      "clientCompany": "ECI DISPLAY INDIA PVT LTD",
+      "grandTotal": 4720,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "079",
+      "docName": "Tax Invoice 079",
+      "date": "2026-04-26",
+      "clientCompany": "fuso glass india pvt ltd",
+      "grandTotal": 44840,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "076",
+      "docName": "Tax Invoice 076",
+      "date": "2026-04-17",
+      "clientCompany": "ECI DISPLAY INDIA PRIVATE LIMITED",
+      "grandTotal": 27730,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "101",
+      "docName": "TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED - 101",
+      "date": "2026-07-15",
+      "clientCompany": "TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED",
+      "grandTotal": 70800,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "096",
+      "docName": "Tax Invoice 096",
+      "date": "2026-07-01",
+      "clientCompany": "TATA STEEL COLORS PVT LTD",
+      "grandTotal": 61360,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "091",
+      "docName": "Tax Invoice 091",
+      "date": "2026-06-05",
+      "clientCompany": "fuso glass india pvt ltd",
+      "grandTotal": 36462,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "077",
+      "docName": "Hi-lex - 077",
+      "date": "2026-04-25",
+      "clientCompany": "HI-LEX INDIA PVT LTD",
+      "grandTotal": 26550,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "102",
+      "docName": "Laxmi acc",
+      "date": "2026-07-19",
+      "clientCompany": "LAKSHMI AAC BLOCKS",
+      "grandTotal": 70800,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "074",
+      "docName": "Serama Logistics Private Limited - 074",
+      "date": "2026-04-07",
+      "clientCompany": "Serama Logistics Limited",
+      "grandTotal": 26904,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "097",
+      "docName": "NVH - 097",
+      "date": "2026-07-01",
+      "clientCompany": "NVH INDIA AUTO PARTS LIMITED",
+      "grandTotal": 15222,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "092",
+      "docName": "Tax Invoice 092",
+      "date": "2026-06-05",
+      "clientCompany": "K M C PETROCHEMICALS PRIVATE  LIMITED",
+      "grandTotal": 4720,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "086",
+      "docName": "Tax Invoice 086",
+      "date": "2026-05-25",
+      "clientCompany": "ECI DISPLAY INDIA PVT LTD",
+      "grandTotal": 4720,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "085",
+      "docName": "Tax Invoice 085",
+      "date": "2026-05-15",
+      "clientCompany": "SKS LIFT CARRIERS",
+      "grandTotal": 94990,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "078",
+      "docName": "Tax Invoice 078",
+      "date": "2026-04-25",
+      "clientCompany": "fuso glass india pvt ltd",
+      "grandTotal": 8260,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "075",
+      "docName": "MIPALLOY PRIVATE LIMITED - 075",
+      "date": "2026-04-11",
+      "clientCompany": "MIPALLOY PRIVATE LIMITED",
+      "grandTotal": 14160,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "103",
+      "docName": "AMT - 103",
+      "date": "2026-07-22",
+      "clientCompany": "AMERICAN TEC ELECTRONIC INDIA PVT LTD",
+      "grandTotal": 16520,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "093",
+      "docName": "Tax Invoice 093",
+      "date": "2026-06-08",
+      "clientCompany": "TATA STEEL COLORS PVT LTD",
+      "grandTotal": 46020,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "087",
+      "docName": "Tax Invoice 087",
+      "date": "2026-05-28",
+      "clientCompany": "ECI DISPLAY INDIA PVT LTD",
+      "grandTotal": 4130,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "080",
+      "docName": "NVH-080",
+      "date": "2026-05-06",
+      "clientCompany": "NVH INDIA AUTO PARTS LIMITED",
+      "grandTotal": 15222,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "098",
+      "docName": "Tax Invoice 098",
+      "date": "2026-07-08",
+      "clientCompany": "DIFFERENT HAIR PRIVATE  LIMITED.",
+      "grandTotal": 5310,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "073",
+      "docName": "SAKTHI AUTO ANCILLARY PRIVATE LIMITED - 073",
+      "date": "2026-04-04",
+      "clientCompany": "SAKTHI AUTO ANCILLARY PRIVATE LIMITED",
+      "grandTotal": 5310,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "099",
+      "docName": "Tax Invoice 099",
+      "date": "2026-07-08",
+      "clientCompany": "FESTON SEV PRIVATE LIMITED.",
+      "grandTotal": 3540,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "094",
+      "docName": "Tax Invoice 094",
+      "date": "2026-06-15",
+      "clientCompany": "FESTON SEV PRIVATE LIMITED.",
+      "grandTotal": 5664,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "088",
+      "docName": "Tax Invoice 088",
+      "date": "2026-05-30",
+      "clientCompany": "SKS LIFT CARRIERS",
+      "grandTotal": 33040,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "083",
+      "docName": "AMT - 083",
+      "date": "2026-05-11",
+      "clientCompany": "AMERICAN TEC ELECTRONIC INDIA PVT LTD",
+      "grandTotal": 49560,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "095",
+      "docName": "Tax Invoice 095",
+      "date": "2026-06-25",
+      "clientCompany": "LIKU-TECH ENVIRONMENTAL SOLUTIONS (INDIA) PRIVATE LIMITED",
+      "grandTotal": 12390,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "089",
+      "docName": "Tax Invoice 089",
+      "date": "2026-05-30",
+      "clientCompany": "NVH INDIA AUTO PARTS LIMITED",
+      "grandTotal": 15222,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "100",
+      "docName": "SRI LITHI ENGINEERING - 100",
+      "date": "2026-07-10",
+      "clientCompany": "SRI LITHI ENGINEERING",
+      "grandTotal": 118000,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    }
+  ],
+  "cashbills": [
+    {
+      "billNo": "007",
+      "docName": "Cash Bill 007",
+      "date": "2026-05-28",
+      "clientCompany": "SHEKINA METAL WORKS",
+      "grandTotal": 44000,
+      "paymentStatus": "paid",
+      "paidAmount": 44000
+    },
+    {
+      "billNo": "002",
+      "docName": "Cash Bill 002",
+      "date": "2026-04-10",
+      "clientCompany": "Capricorn Logistics Pvt Ltd",
+      "grandTotal": 3000,
+      "paymentStatus": "paid",
+      "paidAmount": 3000
+    },
+    {
+      "billNo": "003",
+      "docName": "Cash Bill 003",
+      "date": "2026-04-11",
+      "clientCompany": "Capricorn Logistics Pvt Ltd",
+      "grandTotal": 3000,
+      "paymentStatus": "paid",
+      "paidAmount": 3000
+    },
+    {
+      "billNo": "004",
+      "docName": "Cash Bill 004",
+      "date": "2026-04-15",
+      "clientCompany": "Capricorn Logistics Pvt Ltd",
+      "grandTotal": 3000,
+      "paymentStatus": "paid",
+      "paidAmount": 3000
+    },
+    {
+      "billNo": "008",
+      "docName": "capricorn - 008",
+      "date": "2026-06-18",
+      "clientCompany": "capricorn Logistics Pvt Ltd",
+      "grandTotal": 4000,
+      "paymentStatus": "paid",
+      "paidAmount": 4000
+    },
+    {
+      "billNo": "009",
+      "docName": "capricorn - 009",
+      "date": "2026-06-19",
+      "clientCompany": "capricorn Logistics Pvt Ltd",
+      "grandTotal": 4000,
+      "paymentStatus": "paid",
+      "paidAmount": 4000
+    },
+    {
+      "billNo": "010",
+      "docName": "Cash Bill 010",
+      "date": "2026-06-23",
+      "clientCompany": "Paranthaman",
+      "grandTotal": 419750,
+      "paymentStatus": "paid",
+      "paidAmount": 419750
+    },
+    {
+      "billNo": "006",
+      "docName": "Raja_Sengadu - 006",
+      "date": "2026-05-02",
+      "clientCompany": "Raga",
+      "grandTotal": 29250,
+      "paymentStatus": "paid",
+      "paidAmount": 29250
+    },
+    {
+      "billNo": "001",
+      "docName": "Cash Bill 001",
+      "date": "2026-07-08",
+      "clientCompany": "Ragu",
+      "grandTotal": 94250,
+      "paymentStatus": "paid",
+      "paidAmount": 94250
+    }
+  ],
+  "dcs": [
+    {
+      "dcNo": "OSC0042",
+      "docName": "SHREE ABIRAMI ENGGINEERING WORKS PRIVATE LIMITED - DC",
+      "date": "2026-04-17",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0043",
+      "docName": "Amt-Dc Return",
+      "date": "2026-05-01",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0046",
+      "docName": "INDOSOL SOLAR PVT LTD - DC_RETURN",
+      "date": "2026-05-08",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0050",
+      "docName": "MANGADU -Return_DC",
+      "date": "2026-05-15",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0056",
+      "docName": "TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED - Return DC",
+      "date": "2026-07-14",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0060",
+      "docName": "AMT - DC - 060",
+      "date": "2026-07-21",
+      "clientCompany": "OM SARAVANA CRANES PVT LTD"
+    },
+    {
+      "dcNo": "OSC0047",
+      "docName": "HYUNDAI WIA - SENGADU",
+      "date": "2026-05-15",
+      "clientCompany": "HYUNDAI WIA"
+    },
+    {
+      "dcNo": "OSC0039",
+      "docName": "DC OSC0039",
+      "date": "2026-04-09",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0057",
+      "docName": "LAKSHMI AAC BLOCKS - DC",
+      "date": "2026-07-18",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0051",
+      "docName": "ALLISON DC - 051",
+      "date": "2026-06-22",
+      "clientCompany": "Allison Transmission india pvt ltd"
+    },
+    {
+      "dcNo": "OSC0044",
+      "docName": "HYUNDAI WIA - SENGADU",
+      "date": "2026-05-15",
+      "clientCompany": "HYUNDAI WIA"
+    },
+    {
+      "dcNo": "OSC0048",
+      "docName": "MANGADU -Return_DC",
+      "date": "2026-05-15",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0052",
+      "docName": "GURIT - OSC - DC - 052",
+      "date": "2026-06-22",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0055",
+      "docName": "LAKSHMI AAC BLOCKS - DC_055",
+      "date": "2026-07-14",
+      "clientCompany": "LAKSHMI AAC BLOCKS"
+    },
+    {
+      "dcNo": "OSC0058",
+      "docName": "DC OSC0058",
+      "date": "2026-07-20",
+      "clientCompany": "3D CONCEPT ANALYSIS AND DEVELOPMENT INDIA PVT LTD"
+    },
+    {
+      "dcNo": "OSC0041",
+      "docName": "SHREE ABIRAMI ENGGINEERING WORKS PRIVATE LIMITED - DC",
+      "date": "2026-04-17",
+      "clientCompany": "SHREE ABIRAMI ENGGINEERING WORKS PRIVATE LIMITED"
+    },
+    {
+      "dcNo": "OSC0040",
+      "docName": "DC OSC0040",
+      "date": "2026-04-15",
+      "clientCompany": "AMERICAN TEC ELECTRONICS INDIA PVT LTD"
+    },
+    {
+      "dcNo": "OSC0045",
+      "docName": "Amt-Dc Return",
+      "date": "2026-05-01",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0049",
+      "docName": "20 Ton Flt Return - DC",
+      "date": "2026-05-15",
+      "clientCompany": "OM SARAVANA CRANES"
+    },
+    {
+      "dcNo": "OSC0053",
+      "docName": "DC - FORD - LIUGONG",
+      "date": "2026-06-24",
+      "clientCompany": "FORD INDIA PVT LTD"
+    },
+    {
+      "dcNo": "OSC0054",
+      "docName": "TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED - DC",
+      "date": "2026-07-14",
+      "clientCompany": "TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED"
+    },
+    {
+      "dcNo": "OSC0059",
+      "docName": "AMT - DC - 059",
+      "date": "2026-07-21",
+      "clientCompany": "AMERICAN TEC ELECTRONIC INDIA PVT LTD"
+    }
+  ]
+}
