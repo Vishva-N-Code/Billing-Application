@@ -29,6 +29,7 @@ export default function TaxInvoice({ exportItem }) {
     billingAddress: '',
     billingMobile: '',
     billingWebsite: '',
+    vendorCode: '',
     gstType: 'cgst_sgst', // 'cgst_sgst' or 'igst'
     termsAndConditions: '',
   });
@@ -71,6 +72,7 @@ export default function TaxInvoice({ exportItem }) {
         billingAddress: localMatch.address,
         billingMobile: localMatch.mobile || '',
         billingWebsite: localMatch.website || '',
+        vendorCode: localMatch.vendorCode || '',
         gstType: localMatch.gstin?.startsWith(COMPANY.gstin.substring(0, 2)) ? 'cgst_sgst' : 'igst'
       }));
       return;
@@ -182,12 +184,25 @@ export default function TaxInvoice({ exportItem }) {
       billingAddress: customer.address,
       billingMobile: customer.mobile || '',
       billingWebsite: customer.website || '',
+      vendorCode: customer.vendorCode || '',
     });
     setShowSuggestions(false);
     setShowNewCustomerPrompt(false);
   };
 
   const addAsNewCustomer = async () => {
+    // Duplicate check
+    const allCustomers = await db.customers.toArray();
+    const exists = allCustomers.find(c => 
+      (c.companyName || '').toLowerCase() === form.billingCompany.trim().toLowerCase() ||
+      (form.billingGstin && (c.gstin || '').toLowerCase() === form.billingGstin.trim().toLowerCase())
+    );
+
+    if (exists) {
+      alert('This customer already exists in the database!');
+      return;
+    }
+
     await saveCustomer({
       companyName: form.billingCompany,
       gstin: form.billingGstin,
@@ -195,9 +210,10 @@ export default function TaxInvoice({ exportItem }) {
       mobile: form.billingMobile,
       email: '',
       website: form.billingWebsite,
+      vendorCode: form.vendorCode,
     });
-    const allCustomers = await db.customers.toArray();
-    setCustomers(allCustomers);
+    const updatedCustomers = await db.customers.toArray();
+    setCustomers(updatedCustomers);
     setShowNewCustomerPrompt(false);
     alert('Customer added to database!');
   };
@@ -426,6 +442,11 @@ export default function TaxInvoice({ exportItem }) {
                   <input className="form-control" placeholder="Website"
                     value={form.billingWebsite} onChange={e => setForm({ ...form, billingWebsite: e.target.value })} />
                 </div>
+                <div className="form-group">
+                  <label>Vendor Code (Optional)</label>
+                  <input className="form-control" placeholder="Enter vendor code"
+                    value={form.vendorCode} onChange={e => setForm({ ...form, vendorCode: e.target.value })} />
+                </div>
               </div>
             </div>
 
@@ -561,6 +582,7 @@ export default function TaxInvoice({ exportItem }) {
                             <div style={{ whiteSpace: 'pre-line', fontSize: '0.85rem', marginTop: '3px', lineHeight: '1.4', textTransform: 'uppercase' }}>{form.billingAddress}</div>
                             {form.billingGstin && <div style={{ fontSize: '0.9rem', marginTop: '4px', textTransform: 'uppercase' }}>GSTIN: {form.billingGstin}</div>}
                             {form.billingMobile && <div style={{ fontSize: '0.9rem' }}>Mobile: {form.billingMobile}</div>}
+                            {form.vendorCode && <div style={{ fontSize: '0.9rem', color: '#0066cc', fontWeight: 700 }}>Vendor Code: {form.vendorCode}</div>}
                           </td>
                         </tr>
                       </tbody>
@@ -588,7 +610,7 @@ export default function TaxInvoice({ exportItem }) {
                               {item.description || '—'}
                               {item.quantity && item.unitType ? (
                                 <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-                                  {item.unitType === 'hours' ? `Over time - ${item.quantity} hours` : `${item.quantity} shift(s)`}
+                                  {item.unitType === 'hours' ? `Hours - ${item.quantity} hours` : `${item.quantity} shift(s)`}
                                   {item.rate && ` @ Rs. ${formatCurrency(item.rate)}`}
                                 </div>
                               ) : null}

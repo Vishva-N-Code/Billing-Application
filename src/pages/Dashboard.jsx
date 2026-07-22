@@ -38,14 +38,44 @@ export default function Dashboard() {
     return () => window.removeEventListener('sync-complete', handleSyncComplete);
   }, []);
 
+  const [vehicleAlerts, setVehicleAlerts] = useState([]);
+
   const fetchDashboardData = async () => {
     setLoading(true);
     try {
       // Optimize fetching by parallelizing
-      const [invoices, cashbills] = await Promise.all([
+      const [invoices, cashbills, vehicleSections] = await Promise.all([
         db.invoices.toArray(),
-        db.cashbills.toArray()
+        db.cashbills.toArray(),
+        db.vehicleDetails.toArray()
       ]);
+      
+      // Calculate vehicle document expiry alerts
+      const alerts = [];
+      const now = new Date();
+      (vehicleSections || []).forEach(sec => {
+        (sec.vehicles || []).forEach(v => {
+          const checkDoc = (type, dateStr) => {
+            if (!dateStr) return;
+            const exp = new Date(dateStr);
+            const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+            if (diffDays <= 30) {
+              alerts.push({
+                vehicleName: `${sec.sectionName} - ${v.name || v.regNo || 'Unit'}`,
+                regNo: v.regNo || 'N/A',
+                docType: type,
+                expiryDate: dateStr,
+                diffDays,
+                isExpired: diffDays < 0
+              });
+            }
+          };
+          checkDoc('Fitness Certificate (FC)', v.fcExpiry);
+          checkDoc('Insurance Policy', v.insuranceExpiry);
+          checkDoc('Safety Certificate', v.safetyCertExpiry);
+        });
+      });
+      setVehicleAlerts(alerts.sort((a, b) => a.diffDays - b.diffDays));
       
       const allBillingDocs = [
         ...invoices.map(i => ({...i, type: 'Tax Invoice'})), 
@@ -230,6 +260,29 @@ export default function Dashboard() {
             </div>
           </div>
         </div>
+
+        {/* Equipment & Vehicle Document Expiry Alerts */}
+        {vehicleAlerts.length > 0 && (
+          <div className="card fade-in" style={{ marginBottom: '24px', borderLeft: '4px solid #ef4444', background: 'var(--bg-card)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+              <Clock size={18} color="#ef4444" />
+              <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+                Equipment & Vehicle Document Expiry Alerts ({vehicleAlerts.length})
+              </h3>
+            </div>
+            <div style={{ display: 'flex', gap: '12px', overflowX: 'auto', paddingBottom: '4px' }}>
+              {vehicleAlerts.map((item, idx) => (
+                <div key={idx} style={{ minWidth: '220px', padding: '10px 14px', borderRadius: '8px', background: item.isExpired ? 'rgba(239,68,68,0.1)' : 'rgba(245,158,11,0.1)', border: `1px solid ${item.isExpired ? '#ef4444' : '#f59e0b'}` }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.85rem', color: 'var(--text-primary)' }}>{item.vehicleName}</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Reg: {item.regNo}</div>
+                  <div style={{ fontSize: '0.75rem', fontWeight: 700, color: item.isExpired ? '#ef4444' : '#f59e0b', marginTop: '4px' }}>
+                    {item.docType}: {item.isExpired ? `EXPIRED (${Math.abs(item.diffDays)}d ago)` : `${item.diffDays} days left`}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Main Chart Section */}
         <div className="chart-section">

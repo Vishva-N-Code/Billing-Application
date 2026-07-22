@@ -58,6 +58,9 @@ export default function CashBill({ exportItem }) {
       setForm(f => ({ ...f, termsAndConditions: '' }));
     };
     init();
+
+    window.addEventListener('sync-complete', fetchSaved);
+    return () => window.removeEventListener('sync-complete', fetchSaved);
   }, [location.state, exportItem]);
 
   const loadBill = (bill) => {

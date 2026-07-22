@@ -195,58 +195,113 @@ export default function VehicleDetails() {
                     <thead>
                       <tr>
                         <th style={{ minWidth: '160px' }}>VEHICLE NAME / BRAND</th>
-                        <th style={{ minWidth: '180px' }}>REGISTRATION NUMBER</th>
-                        <th style={{ minWidth: '200px' }}>CHASSIS NUMBER</th>
-                        <th style={{ minWidth: '140px' }}>EST. VALUE (₹)</th>
+                        <th style={{ minWidth: '140px' }}>REG. NUMBER</th>
+                        <th style={{ minWidth: '160px' }}>CHASSIS NUMBER</th>
+                        <th style={{ minWidth: '140px' }}>FC EXPIRY</th>
+                        <th style={{ minWidth: '140px' }}>INSURANCE EXPIRY</th>
+                        <th style={{ minWidth: '140px' }}>SAFETY CERT EXPIRY</th>
                         <th style={{ width: '50px' }}></th>
                       </tr>
                     </thead>
                     <tbody>
-                      {(section.vehicles || []).map((v, vIdx) => (
-                        <tr key={vIdx}>
-                          <td>
-                            <input
-                              className="form-control"
-                              placeholder="e.g. Unit 1 / Baoli"
-                              value={v.name}
-                              onChange={e => handleVehicleChange(section.id, vIdx, 'name', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              className="form-control"
-                              placeholder="e.g. TN 88 F 0907"
-                              value={v.regNo}
-                              onChange={e => handleVehicleChange(section.id, vIdx, 'regNo', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              className="form-control"
-                              placeholder="e.g. CLG2000XYZ123"
-                              value={v.chassisNo}
-                              onChange={e => handleVehicleChange(section.id, vIdx, 'chassisNo', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <input
-                              className="form-control"
-                              placeholder="e.g. 5,00,000"
-                              value={v.value}
-                              onChange={e => handleVehicleChange(section.id, vIdx, 'value', e.target.value)}
-                            />
-                          </td>
-                          <td>
-                            <button
-                              className="btn-icon"
-                              onClick={() => handleRemoveVehicle(section.id, vIdx)}
-                              title="Remove this vehicle row"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
+                      {(section.vehicles || []).map((v, vIdx) => {
+                        const checkExpiryStatus = (dateStr) => {
+                          if (!dateStr) return null;
+                          const exp = new Date(dateStr);
+                          const now = new Date();
+                          const diffDays = Math.ceil((exp - now) / (1000 * 60 * 60 * 24));
+                          if (diffDays < 0) return { label: 'EXPIRED', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.15)' };
+                          if (diffDays <= 30) return { label: `${diffDays}d left`, color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.15)' };
+                          return { label: 'VALID', color: '#10b981', bg: 'rgba(16, 185, 129, 0.15)' };
+                        };
+
+                        const fcStatus = checkExpiryStatus(v.fcExpiry);
+                        const insStatus = checkExpiryStatus(v.insuranceExpiry);
+                        const safetyStatus = checkExpiryStatus(v.safetyCertExpiry);
+
+                        return (
+                          <tr key={vIdx}>
+                            <td>
+                              <input
+                                className="form-control"
+                                placeholder="e.g. Unit 1 / Baoli"
+                                value={v.name}
+                                onChange={e => handleVehicleChange(section.id, vIdx, 'name', e.target.value)}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className="form-control"
+                                placeholder="e.g. TN 88 F 0907"
+                                value={v.regNo}
+                                onChange={e => handleVehicleChange(section.id, vIdx, 'regNo', e.target.value)}
+                              />
+                            </td>
+                            <td>
+                              <input
+                                className="form-control"
+                                placeholder="e.g. CLG2000XYZ123"
+                                value={v.chassisNo}
+                                onChange={e => handleVehicleChange(section.id, vIdx, 'chassisNo', e.target.value)}
+                              />
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <input
+                                  type="date"
+                                  className="form-control"
+                                  value={v.fcExpiry || ''}
+                                  onChange={e => handleVehicleChange(section.id, vIdx, 'fcExpiry', e.target.value)}
+                                />
+                                {fcStatus && (
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 800, color: fcStatus.color, background: fcStatus.bg, padding: '2px 6px', borderRadius: '4px', textAlign: 'center' }}>
+                                    FC: {fcStatus.label}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <input
+                                  type="date"
+                                  className="form-control"
+                                  value={v.insuranceExpiry || ''}
+                                  onChange={e => handleVehicleChange(section.id, vIdx, 'insuranceExpiry', e.target.value)}
+                                />
+                                {insStatus && (
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 800, color: insStatus.color, background: insStatus.bg, padding: '2px 6px', borderRadius: '4px', textAlign: 'center' }}>
+                                    INS: {insStatus.label}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                <input
+                                  type="date"
+                                  className="form-control"
+                                  value={v.safetyCertExpiry || ''}
+                                  onChange={e => handleVehicleChange(section.id, vIdx, 'safetyCertExpiry', e.target.value)}
+                                />
+                                {safetyStatus && (
+                                  <span style={{ fontSize: '0.65rem', fontWeight: 800, color: safetyStatus.color, background: safetyStatus.bg, padding: '2px 6px', borderRadius: '4px', textAlign: 'center' }}>
+                                    CERT: {safetyStatus.label}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td>
+                              <button
+                                className="btn-icon"
+                                onClick={() => handleRemoveVehicle(section.id, vIdx)}
+                                title="Remove this vehicle row"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

@@ -373,10 +373,12 @@ export default function ProformaInvoice({ exportItem }) {
                     printRows.push({ isItem: true, item, config, sno: globalItemIndex });
                   });
                 });
-                const PAGES = Math.ceil(Math.max(1, printRows.length) / 12);
+                const itemsPerPage = 8;
+                const PAGES = Math.ceil(Math.max(1, printRows.length) / itemsPerPage);
                 
                 return Array.from({ length: PAGES }, (_, pageIndex) => {
-                  const pageRows = printRows.slice(pageIndex * 12, (pageIndex + 1) * 12);
+                  const pageRows = printRows.slice(pageIndex * itemsPerPage, (pageIndex + 1) * itemsPerPage);
+                  const isFirstPage = pageIndex === 0;
                   const isLastPage = pageIndex === PAGES - 1;
                   return (
             <div key={pageIndex} className="doc-preview">
@@ -396,29 +398,33 @@ export default function ProformaInvoice({ exportItem }) {
                   </div>
                 </div>
 
-                <hr className="doc-divider" />
+                <div style={{ height: '2px', background: '#c8952e', margin: '10px 0', width: '100%' }}></div>
 
-                <div className="invoice-title">PROFORMA INVOICE</div>
-
-                {/* Client details & Date */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>TO:</div>
-                    <div style={{ paddingLeft: '20px', fontSize: '0.85rem' }}>
-                      <strong>{form.clientCompany || '_______________'}</strong>
-                      {form.clientAddress && (
-                        <div style={{ fontSize: '0.8rem', color: '#555', whiteSpace: 'pre-line' }}>{form.clientAddress}</div>
-                      )}
-                    </div>
-                  </div>
-                  <div style={{ fontSize: '0.82rem', textAlign: 'right' }}>
-                    <strong>Date: {formatDate(form.date)}</strong><br />
-                    <strong style={{ display: 'inline-block', marginTop: '4px' }}>Invoice No: {form.invoiceNo}</strong>
-                  </div>
+                <div className="invoice-title" style={{ margin: '15px 0', fontSize: '1.15rem' }}>
+                  PROFORMA INVOICE {PAGES > 1 && `(Page ${pageIndex + 1} of ${PAGES})`}
                 </div>
 
+                {/* Client details & Date - ONLY ON FIRST PAGE */}
+                {isFirstPage && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>TO:</div>
+                      <div style={{ paddingLeft: '20px', fontSize: '0.85rem' }}>
+                        <strong>{form.clientCompany || '_______________'}</strong>
+                        {form.clientAddress && (
+                          <div style={{ fontSize: '0.8rem', color: '#555', whiteSpace: 'pre-line', marginTop: '4px' }}>{form.clientAddress}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div style={{ fontSize: '0.82rem', textAlign: 'right' }}>
+                      <strong>Date: {formatDate(form.date)}</strong><br />
+                      <strong style={{ display: 'inline-block', marginTop: '6px' }}>Invoice No: {form.invoiceNo}</strong>
+                    </div>
+                  </div>
+                )}
+
                 {/* Table */}
-                <table className="doc-table" style={{ marginTop: '16px' }}>
+                <table className="doc-table" style={{ marginTop: isFirstPage ? '16px' : '8px', tableLayout: 'fixed' }}>
                   <thead>
                     <tr>
                       <th style={{ width: '40px', textAlign: 'center' }}>S.No</th>
@@ -463,36 +469,40 @@ export default function ProformaInvoice({ exportItem }) {
                   </tbody>
                 </table>
 
-                <div style={{ fontSize: '0.78rem', color: '#666', marginTop: '8px', fontStyle: 'italic' }}>
-                  * For Tax Invoice, applicable GST will be charged additionally.
-                </div>
-
-                {/* Terms and Conditions */}
-                {form.termsAndConditions && (
-                  <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
-                    <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
-                      {form.termsAndConditions}
+                {isLastPage && (
+                  <>
+                    <div style={{ fontSize: '0.78rem', color: '#666', marginTop: '8px', fontStyle: 'italic' }}>
+                      * For Tax Invoice, applicable GST will be charged additionally.
                     </div>
-                  </div>
-                )}
 
-                {/* Thank you & Regards + Signature */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '24px' }}>
-                  <div>
-                    <h4 style={{ color: '#c8952e', fontWeight: 700, fontSize: '0.85rem' }}>Thank you &amp; Regards</h4>
-                    <p style={{ fontWeight: 600, fontSize: '0.82rem', marginTop: '6px' }}>{companyProfile.owner}</p>
-                    <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{companyProfile.name}</p>
-                  </div>
-                  <div style={{ textAlign: 'center', minWidth: '140px' }}>
-                    {signature && (
-                      <>
-                        <img src={signature} alt="Signature" className="signature-img" />
-                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
-                      </>
+                    {/* Terms and Conditions */}
+                    {form.termsAndConditions && (
+                      <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                        <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
+                        <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
+                          {form.termsAndConditions}
+                        </div>
+                      </div>
                     )}
-                  </div>
-                </div>
+
+                    {/* Thank you & Regards + Signature */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '24px' }}>
+                      <div>
+                        <h4 style={{ color: '#c8952e', fontWeight: 700, fontSize: '0.85rem' }}>Thank you &amp; Regards</h4>
+                        <p style={{ fontWeight: 600, fontSize: '0.82rem', marginTop: '6px' }}>{companyProfile.owner}</p>
+                        <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{companyProfile.name}</p>
+                      </div>
+                      <div style={{ textAlign: 'center', minWidth: '140px' }}>
+                        {signature && (
+                          <>
+                            <img src={signature} alt="Signature" className="signature-img" />
+                            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
               );

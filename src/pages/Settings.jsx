@@ -1,11 +1,43 @@
 import { useState, useEffect } from 'react';
-import { Download, Upload, Save, Settings as SettingsIcon } from 'lucide-react';
+import { Download, Upload, Save, Settings as SettingsIcon, Shield, Fingerprint, Lock } from 'lucide-react';
 import { getCompanyProfile, updateCompanyProfile, db } from '../db';
+import { securitySettings, registerBiometric } from '../utils/security';
 import 'dexie-export-import';
 
 export default function Settings() {
   const [profile, setProfile] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [securityTab, setSecurityTab] = useState({
+    lockEnabled: securitySettings.isLockEnabled,
+    pin: securitySettings.appPin || '',
+    biometricEnabled: securitySettings.isBiometricEnabled
+  });
+
+  const handleSecurityChange = async (field, value) => {
+    if (field === 'lockEnabled') {
+      securitySettings.isLockEnabled = value;
+      setSecurityTab(prev => ({ ...prev, lockEnabled: value }));
+    }
+    if (field === 'pin') {
+      const p = value.replace(/\D/g, '').slice(0, 4);
+      securitySettings.appPin = p;
+      setSecurityTab(prev => ({ ...prev, pin: p }));
+    }
+    if (field === 'biometricEnabled') {
+      if (value) {
+        try {
+          await registerBiometric();
+          setSecurityTab(prev => ({ ...prev, biometricEnabled: true }));
+          alert('Biometric login enabled successfully!');
+        } catch (e) {
+          alert('Failed to enable biometric: ' + e.message);
+        }
+      } else {
+        securitySettings.disableBiometric();
+        setSecurityTab(prev => ({ ...prev, biometricEnabled: false }));
+      }
+    }
+  };
 
   useEffect(() => {
     async function load() {
@@ -144,6 +176,58 @@ export default function Settings() {
             <div className="form-group mb-0">
               <textarea className="form-control" rows={4} value={profile.termsAndConditions} onChange={e => handleChange('termsAndConditions', e.target.value)} placeholder="1. Interest..." />
             </div>
+          </div>
+
+          <div className="card">
+            <div className="card-title"><Shield size={20} /> App Security & Authentication</div>
+            
+            <div className="form-group" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border-color)', marginBottom: '16px' }}>
+              <div>
+                <strong style={{ display: 'block', marginBottom: '4px' }}>Enable App Lock</strong>
+                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Lock the app after 5 minutes of inactivity or when closed</span>
+              </div>
+              <div>
+                <input 
+                  type="checkbox" 
+                  style={{ width: '24px', height: '24px', cursor: 'pointer' }}
+                  checked={securityTab.lockEnabled} 
+                  onChange={e => handleSecurityChange('lockEnabled', e.target.checked)} 
+                />
+              </div>
+            </div>
+
+            {securityTab.lockEnabled && (
+              <div className="form-row form-row-2" style={{ padding: '16px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border-color)', borderLeft: '4px solid #3b82f6' }}>
+                <div className="form-group mb-0">
+                  <label><Lock size={14} style={{display: 'inline', marginRight: '4px', verticalAlign: 'middle'}}/> 4-Digit Security PIN</label>
+                  <input 
+                    type="password" 
+                    className="form-control" 
+                    placeholder="Enter 4-digit PIN" 
+                    value={securityTab.pin} 
+                    onChange={e => handleSecurityChange('pin', e.target.value)} 
+                    maxLength={4}
+                    style={{ fontSize: '1.2rem', letterSpacing: '4px' }}
+                  />
+                  <small style={{color: 'var(--text-secondary)', marginTop: '8px', display: 'block'}}>This PIN will be required to unlock the app.</small>
+                </div>
+
+                <div className="form-group mb-0">
+                  <label><Fingerprint size={14} style={{display: 'inline', marginRight: '4px', verticalAlign: 'middle'}}/> Biometric Unlock</label>
+                  <div style={{ marginTop: '4px' }}>
+                    {securityTab.biometricEnabled ? (
+                      <button className="btn btn-secondary" onClick={() => handleSecurityChange('biometricEnabled', false)} style={{ width: '100%' }}>
+                        Disable Fingerprint/FaceID
+                      </button>
+                    ) : (
+                      <button className="btn btn-primary" onClick={() => handleSecurityChange('biometricEnabled', true)} style={{ width: '100%' }}>
+                        Enable Fingerprint/FaceID
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: '16px', justifyContent: 'flex-start' }}>

@@ -24,13 +24,13 @@ export default function Quotation({ exportItem }) {
   });
 
   const [items, setItems] = useState([
-    { description: '', price: '' }
+    { description: '', quantity: '', rate: '', price: '' }
   ]);
 
   const [signature, setSignature] = useState(null);
   const [companyProfile, setCompanyProfile] = useState(COMPANY);
 
-  const addItem = () => setItems([...items, { description: '', price: '' }]);
+  const addItem = () => setItems([...items, { description: '', quantity: '', rate: '', price: '' }]);
 
   const removeItem = (i) => {
     if (items.length > 1) setItems(items.filter((_, idx) => idx !== i));
@@ -40,6 +40,16 @@ export default function Quotation({ exportItem }) {
     const updated = [...items];
     updated[i][field] = value;
     setItems(updated);
+  };
+
+  const calcAmount = (item) => {
+    if (item.price !== undefined && item.price !== '' && item.price !== null && item.price !== 0 && item.price !== '0') {
+      const p = parseFloat(item.price);
+      if (!isNaN(p)) return p;
+    }
+    const rate = parseFloat(item.rate) || 0;
+    const qty = parseFloat(item.quantity) || 0;
+    return rate * qty;
   };
 
   const addNote = () => setForm({ ...form, notes: [...form.notes, ''] });
@@ -201,23 +211,34 @@ export default function Quotation({ exportItem }) {
                 <table className="table">
                   <thead>
                     <tr>
-                      <th style={{ width: '50px' }}>S.No</th>
+                      <th style={{ width: '40px', textAlign: 'center' }}>S.No</th>
                       <th>Description</th>
-                      <th style={{ width: '140px' }}>Price (Rs.)</th>
-                      <th style={{ width: '50px' }}></th>
+                      <th style={{ width: '80px', textAlign: 'center' }}>Qty</th>
+                      <th style={{ width: '120px' }}>Rate</th>
+                      <th style={{ width: '140px' }}>Amount (Rs.)</th>
+                      <th style={{ width: '40px' }}></th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((item, i) => (
                       <tr key={i}>
-                        <td>{i + 1}</td>
+                        <td style={{ textAlign: 'center' }}>{i + 1}</td>
                         <td>
                           <textarea className="form-control" placeholder="Description" rows={2}
                             value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} />
                         </td>
                         <td>
+                          <input className="form-control" type="number" placeholder="0" style={{ textAlign: 'center' }}
+                            value={item.quantity} onChange={e => updateItem(i, 'quantity', e.target.value)} />
+                        </td>
+                        <td>
                           <input className="form-control" type="number" placeholder="0.00"
-                            value={item.price} onChange={e => updateItem(i, 'price', e.target.value)} />
+                            value={item.rate} onChange={e => updateItem(i, 'rate', e.target.value)} />
+                        </td>
+                        <td>
+                          <input className="form-control" type="number" placeholder="0.00"
+                            value={item.price || (item.quantity && item.rate ? calcAmount(item) : '')}
+                            onChange={e => updateItem(i, 'price', e.target.value)} />
                         </td>
                         <td>
                           <button className="btn-icon" onClick={() => removeItem(i)} title="Remove">
@@ -330,27 +351,42 @@ export default function Quotation({ exportItem }) {
                           <table className="doc-table" style={{ tableLayout: 'fixed', width: '100%' }}>
                             <thead>
                               <tr>
-                                <th style={{ width: '50px' }}>S.No</th>
+                                <th style={{ width: '45px', textAlign: 'center' }}>S.No</th>
                                 <th>Description</th>
-                                <th style={{ width: '160px', textAlign: 'right' }}>Amount</th>
+                                <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
+                                <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
+                                <th style={{ width: '130px', textAlign: 'right' }}>Amount</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {pageItems.map((item, i) => (
-                                <tr key={i}>
-                                  <td>{pageIndex * itemsPerPage + i + 1}</td>
-                                  <td>{item.description || '—'}</td>
-                                  <td className="amount-col" style={{ boxSizing: 'border-box' }}>
-                                    {item.price ? (
-                                      <>
-                                        <span style={{ float: 'left' }}>Rs.</span>
-                                        <span style={{ float: 'right' }}>{formatCurrency(item.price)}</span>
-                                        <div style={{ clear: 'both' }} />
-                                      </>
-                                    ) : ''}
-                                  </td>
-                                </tr>
-                              ))}
+                              {pageItems.map((item, i) => {
+                                const amount = item.price || calcAmount(item);
+                                return (
+                                  <tr key={i}>
+                                    <td style={{ textAlign: 'center' }}>{pageIndex * itemsPerPage + i + 1}</td>
+                                    <td>{item.description || '—'}</td>
+                                    <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
+                                    <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
+                                      {item.rate ? (
+                                        <>
+                                          <span style={{ float: 'left' }}>Rs.</span>
+                                          <span style={{ float: 'right' }}>{formatCurrency(item.rate)}</span>
+                                          <div style={{ clear: 'both' }} />
+                                        </>
+                                      ) : '—'}
+                                    </td>
+                                    <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
+                                      {amount ? (
+                                        <>
+                                          <span style={{ float: 'left' }}>Rs.</span>
+                                          <span style={{ float: 'right' }}>{formatCurrency(amount)}</span>
+                                          <div style={{ clear: 'both' }} />
+                                        </>
+                                      ) : '—'}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
 

@@ -114,7 +114,7 @@ export default function Reports() {
   const downloadGstPdf = async () => {
     if (!gstReportRef.current) return;
     try {
-      const canvas = await html2canvas(gstReportRef.current, { scale: 2 });
+      const canvas = await html2canvas(gstReportRef.current, { scale: 2, backgroundColor: '#141823' });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfW = pdf.internal.pageSize.getWidth();
@@ -144,7 +144,7 @@ export default function Reports() {
   const downloadStatement = async () => {
     if (!reportRef.current) return;
     try {
-      const canvas = await html2canvas(reportRef.current, { scale: 2 });
+      const canvas = await html2canvas(reportRef.current, { scale: 2, backgroundColor: '#141823' });
       const imgData = canvas.toDataURL('image/png');
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pdfW = pdf.internal.pageSize.getWidth();
@@ -204,18 +204,18 @@ export default function Reports() {
               </div>
             </div>
 
-            <div ref={gstReportRef} style={{ background: '#fff', padding: '40px', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.05)' }}>
+            <div className="card" ref={gstReportRef} style={{ padding: '40px', marginBottom: '20px' }}>
               {companyProfile && (
-                <div style={{ marginBottom: '30px', borderBottom: '2px solid #eee', paddingBottom: '20px' }}>
+                <div style={{ marginBottom: '30px', borderBottom: '2px solid var(--border-color)', paddingBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <div>
-                      <h2 style={{ color: '#c8952e', margin: 0 }}>{companyProfile.name}</h2>
-                      <div style={{ fontSize: '0.85rem', color: '#666', maxWidth: '400px' }}>{companyProfile.address}</div>
+                      <h2 style={{ color: 'var(--accent-gold)', margin: 0 }}>{companyProfile.name}</h2>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '400px' }}>{companyProfile.address}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <h3 style={{ margin: 0 }}>GST Sales Register</h3>
-                      <div style={{ fontSize: '0.9rem', color: '#666' }}>Period: {formatDate(gstStartDate)} to {formatDate(gstEndDate)}</div>
-                      <div style={{ fontSize: '0.8rem', color: '#888', marginTop: '4px' }}>Generated on: {formatDate(new Date())}</div>
+                      <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>GST Sales Register</h3>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Period: {formatDate(gstStartDate)} to {formatDate(gstEndDate)}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Generated on: {formatDate(new Date())}</div>
                     </div>
                   </div>
                 </div>
@@ -296,21 +296,21 @@ export default function Reports() {
             </div>
 
             {/* Printable Area */}
-            <div ref={reportRef} style={{ background: '#fff', padding: selectedCustomer !== 'all' ? '40px' : '0' }}>
+            <div className={selectedCustomer !== 'all' ? 'card' : ''} ref={reportRef} style={{ padding: selectedCustomer !== 'all' ? '40px' : '0' }}>
               {selectedCustomer !== 'all' && companyProfile && (
-                <div style={{ marginBottom: '30px', borderBottom: '2px solid #eee', paddingBottom: '20px' }}>
+                <div style={{ marginBottom: '30px', borderBottom: '1px solid var(--border-color)', paddingBottom: '20px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <div>
-                      <h2 style={{ color: '#c8952e', margin: 0 }}>{companyProfile.name}</h2>
-                      <div style={{ fontSize: '0.85rem', color: '#666', maxWidth: '300px' }}>{companyProfile.address}</div>
+                      <h2 style={{ color: 'var(--accent-gold)', margin: 0 }}>{companyProfile.name}</h2>
+                      <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '300px' }}>{companyProfile.address}</div>
                     </div>
                     <div style={{ textAlign: 'right' }}>
-                      <h3 style={{ margin: 0 }}>Outstanding Statement</h3>
-                      <div style={{ fontSize: '0.9rem', color: '#666' }}>Date: {formatDate(new Date())}</div>
+                      <h3 style={{ margin: 0, color: 'var(--text-primary)' }}>Outstanding Statement</h3>
+                      <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Date: {formatDate(new Date())}</div>
                     </div>
                   </div>
                   <div style={{ marginTop: '20px' }}>
-                    <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: '#888' }}>Statement For:</div>
+                    <div style={{ fontSize: '0.8rem', textTransform: 'uppercase', color: 'var(--text-muted)' }}>Statement For:</div>
                     <div style={{ fontSize: '1.2rem', fontWeight: 700 }}>{selectedCustomer}</div>
                   </div>
                 </div>

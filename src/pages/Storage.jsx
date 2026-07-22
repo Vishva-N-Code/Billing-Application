@@ -31,10 +31,16 @@ export default function Storage() {
   const [paymentAmount, setPaymentAmount] = useState('');
 
   const fetchData = async () => {
-    setInvoices((await db.invoices.toArray()).reverse());
-    setQuotations((await db.quotations.toArray()).reverse());
-    setProformas((await db.proformaInvoices.toArray()).reverse());
-    setCashBills((await db.cashbills.toArray()).reverse());
+    const isClean = (doc) => {
+      const isClientEmpty = !doc.clientCompany || doc.clientCompany.trim() === '';
+      const isZeroTotal = doc.grandTotal === 0 || doc.grandTotal == null;
+      const isDraftName = doc.docName && (doc.docName.toLowerCase().includes('draft') || doc.docName.toLowerCase().includes('test'));
+      return !(isClientEmpty && isZeroTotal) && !isDraftName;
+    };
+    setInvoices((await db.invoices.toArray()).filter(isClean).reverse());
+    setQuotations((await db.quotations.toArray()).filter(isClean).reverse());
+    setProformas((await db.proformaInvoices.toArray()).filter(isClean).reverse());
+    setCashBills((await db.cashbills.toArray()).filter(isClean).reverse());
     setDcs((await db.deliveryChellans.toArray()).reverse());
     setExperienceCerts((await db.experienceCertificates.toArray()).reverse());
   };

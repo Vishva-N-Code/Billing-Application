@@ -1,18 +1,20 @@
 import { useRef, useState } from 'react';
-import { FileDown, Image, Printer, Share2, Save } from 'lucide-react';
+import { FileDown, Image, Printer, Share2, Save, Loader2 } from 'lucide-react';
 import html2canvas from 'html2canvas-pro';
 import jsPDF from 'jspdf';
 
-export default function ExportButtons({ targetRef, filename = 'document', onExport, onSaveOnly }) {
+export default function ExportButtons({ targetRef, filename = 'document', onExport, onSaveOnly, clientMobile, clientName, grandTotal }) {
   const [exporting, setExporting] = useState(false);
+  const [readyShare, setReadyShare] = useState(null);
+
+  const sanitizeFilename = (name) => {
+    return name.replace(/[<>:"/\\|?*]/g, '').trim() || 'document';
+  };
 
   const getCanvas = async () => {
     if (!targetRef.current) return null;
     const el = targetRef.current;
     
-    // Reset scroll to top to avoid offset issues with html2canvas
-    window.scrollTo(0, 0);
-
     // Apply global capture class
     document.body.classList.add('exporting-pdf');
     
@@ -23,17 +25,20 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
     el.style.margin = '0';
     el.style.transform = 'none';
 
-    // Wait for the browser to apply styles and recalculate layout (2 frames + small delay)
-    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 150))));
+    // Wait for the browser to apply styles and ensure all images/fonts are rendered
+    // Using a more generous delay for stability as requested by the user
+    await new Promise(resolve => setTimeout(resolve, 600));
     
     try {
       const canvas = await html2canvas(el, {
-        scale: 3, 
+        scale: 2.5, // Reduced slightly from 3 for better performance/memory stability
         useCORS: true,
         backgroundColor: '#ffffff',
         logging: false,
         windowWidth: 794,
         allowTaint: true,
+        scrollX: 0,
+        scrollY: 0,
       });
       
       // Restore styles and cleanup
@@ -48,34 +53,44 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
     }
   };
 
-
   const exportPDF = async (returnBlob = false) => {
     setExporting(true);
     try {
       const canvas = await getCanvas();
       if (!canvas) { setExporting(false); return null; }
       
-      const imgData = canvas.toDataURL('image/jpeg', 0.98);
-      
+      const imgData = canvas.toDataURL('image/jpeg', 0.95);
       const pdf = new jsPDF('p', 'mm', 'a4');
-      const pdfW = pdf.internal.pageSize.getWidth(); // 210
       
+      const pdfW = 210;
+      const pdfH = 297;
       const imgW = canvas.width;
       const imgH = canvas.height;
-      
-      // Force scaling strictly by width to avoid any horizontal gaps
       const ratio = pdfW / imgW;
-      const outputW = imgW * ratio;
-      const outputH = imgH * ratio;
+      const totalH_mm = imgH * ratio;
 
-      pdf.addImage(imgData, 'JPEG', 0, 0, outputW, outputH);
+      let heightLeft = totalH_mm;
+      let position = 0;
+
+      // Add first page
+      pdf.addImage(imgData, 'JPEG', 0, position, pdfW, totalH_mm);
+      heightLeft -= pdfH;
+
+      // Add subsequent pages if content overflows
+      while (heightLeft > 0) {
+        position -= pdfH;
+        pdf.addPage();
+        pdf.addImage(imgData, 'JPEG', 0, position, pdfW, totalH_mm);
+        heightLeft -= pdfH;
+      }
 
       if (returnBlob) {
         setExporting(false);
         return pdf.output('blob');
       }
 
-      pdf.save(`${filename}.pdf`);
+      const cleanName = sanitizeFilename(filename);
+      pdf.save(`${cleanName}.pdf`);
       if (onExport) onExport();
     } catch (err) {
       console.error('PDF export error:', err);
@@ -89,24 +104,19 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
       const canvas = await getCanvas();
       if (!canvas) { setExporting(false); return null; }
       
-      // Calculate A4 minimum height based on width (A4 ratio is ~1:1.4142)
       const imgW = canvas.width;
       const targetH = Math.max(canvas.height, imgW * 1.4142);
       
-      // Create a consistently sized A4 canvas
       const a4Canvas = document.createElement('canvas');
       a4Canvas.width = imgW;
       a4Canvas.height = targetH;
       const ctx = a4Canvas.getContext('2d');
       
-      // Fill white background
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, a4Canvas.width, a4Canvas.height);
-      
-      // Draw content at the top
       ctx.drawImage(canvas, 0, 0);
 
-      const dataUrl = a4Canvas.toDataURL('image/jpeg', 0.98);
+      const dataUrl = a4Canvas.toDataURL('image/jpeg', 0.95);
       
       if (returnBlob) {
         const res = await fetch(dataUrl);
@@ -114,8 +124,9 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
         return await res.blob();
       }
 
+      const cleanName = sanitizeFilename(filename);
       const link = document.createElement('a');
-      link.download = `${filename}.jpg`;
+      link.download = `${cleanName}.jpg`;
       link.href = dataUrl;
       link.click();
       if (onExport) onExport();
@@ -130,108 +141,130 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
     if (onExport) onExport();
   };
 
+  const executeShare = async (blob, format) => {
+    const cleanName = sanitizeFilename(filename);
+    const extension = format === 'pdf' ? 'pdf' : 'jpg';
+    const mimeType = format === 'pdf' ? 'application/pdf' : 'image/jpeg';
+    const file = new File([blob], `${cleanName}.${extension}`, { type: mimeType });
+    
+    setReadyShare(null);
+
+    // Try native sharing first (mobile browsers / supported desktop browsers)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try {
+        await navigator.share({ files: [file], title: cleanName });
+        if (onExport) onExport();
+        return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.log('Native share failed, falling back to download/WhatsApp', err);
+      }
+    }
+
+    // Fallback: Download file + open WhatsApp with prefilled client details
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.style.display = 'none';
+    a.href = url;
+    a.download = `${cleanName}.${extension}`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    
+    if (onExport) onExport();
+    
+    const clientHeader = clientName ? `Client: *${clientName}*\n` : '';
+    const totalHeader = grandTotal ? `Total Amount: *₹${grandTotal.toLocaleString('en-IN')}*\n` : '';
+    const msg = `*OM SARAVANA CRANES*\n\nDear Sir/Madam,\nHere is your *${cleanName}*.\n${clientHeader}${totalHeader}\nThank you for choosing OM SARAVANA CRANES.\nMobile: 9551076305 / 9551070705`;
+    
+    let phoneStr = '';
+    if (clientMobile) {
+      const cleanPhone = String(clientMobile).replace(/[^0-9]/g, '');
+      if (cleanPhone.length >= 10) {
+        phoneStr = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+      }
+    }
+
+    const phoneParam = phoneStr ? `phone=${phoneStr}&` : '';
+    const waProtocolUrl = `whatsapp://send?${phoneParam}text=${encodeURIComponent(msg)}`;
+    const waWebUrl = `https://web.whatsapp.com/send?${phoneParam}text=${encodeURIComponent(msg)}`;
+    
+    setTimeout(() => {
+      window.location.href = waProtocolUrl;
+      setTimeout(() => {
+        if (document.visibilityState === 'visible') window.open(waWebUrl, '_blank');
+      }, 2000);
+    }, 300);
+  };
+
   const shareDocument = async (format) => {
+    if (readyShare && readyShare.format === format) {
+      executeShare(readyShare.blob, format);
+      return;
+    }
     setExporting(true);
     try {
       let blob = null;
-      let extension = '';
-      let mimeType = '';
+      if (format === 'pdf') blob = await exportPDF(true);
+      else blob = await exportJPG(true);
 
-      if (format === 'pdf') {
-        blob = await exportPDF(true);
-        extension = 'pdf';
-        mimeType = 'application/pdf';
-      } else {
-        blob = await exportJPG(true);
-        extension = 'jpg';
-        mimeType = 'image/jpeg';
+      if (blob) {
+         setReadyShare({ format, blob });
       }
-
-      if (!blob) {
-         setExporting(false);
-         return;
-      }
-      
-      const file = new File([blob], `${filename}.${extension}`, { type: mimeType });
-      const msg = '';
-
-      // 1. Try Native Web Share API first. It attaches the file natively if supported!
-      // This is the absolute best way to directly share a file to WhatsApp on devices that support it.
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: filename,
-            text: msg
-          });
-          if (onExport) onExport();
-          setExporting(false);
-          return; // Success! Done.
-        } catch (shareErr) {
-          if (shareErr.name === 'AbortError') {
-             setExporting(false);
-             return;
-          }
-          console.log('Native share failed, falling back to manual WA navigation', shareErr);
-        }
-      }
-
-      // 2. Fallback: Download the file, then open WhatsApp protocol without a phone number
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.style.display = 'none';
-      a.href = url;
-      a.download = `${filename}.${extension}`;
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 100);
-
-      if (onExport) onExport();
-
-      // IMPORTANT: Remove the phone parameter so WhatsApp asks the user who to send it to
-      const waProtocolUrl = `whatsapp://send?text=${encodeURIComponent(msg)}`;
-      const waWebUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`;
-
-      setTimeout(() => {
-        window.location.href = waProtocolUrl;
-        setTimeout(() => {
-          if (document.visibilityState === 'visible') {
-            window.location.href = waWebUrl;
-          }
-        }, 2000);
-      }, 300);
-
     } catch (e) {
-      console.error('Share execution failed', e);
+      console.error('Share preparation failed', e);
     }
     setExporting(false);
   };
 
   return (
-    <>
-      <div className="export-bar" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+    <div className="export-bar" style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '16px' }}>
       {onSaveOnly && (
         <button className="btn btn-primary" onClick={onSaveOnly} disabled={exporting} style={{ background: '#4CAF50', borderColor: '#4CAF50' }}>
           <Save size={16} />
           Save to App
         </button>
       )}
+      
       <button className="btn btn-secondary" onClick={handlePrint} disabled={exporting}>
         <Printer size={16} />
         Print
       </button>
-      <button className="btn btn-primary" onClick={() => shareDocument('pdf')} disabled={exporting} style={{ background: '#25D366', borderColor: '#25D366' }}>
-        <Share2 size={16} />
-        {exporting ? '...' : 'Share PDF'}
+
+      <button 
+        className="btn btn-primary" 
+        onClick={() => shareDocument('pdf')} 
+        disabled={exporting} 
+        style={{ 
+          background: readyShare?.format === 'pdf' ? '#fff' : '#25D366', 
+          color: readyShare?.format === 'pdf' ? '#000' : '#fff', 
+          borderColor: '#25D366',
+          minWidth: '160px'
+        }}
+      >
+        {exporting ? <Loader2 size={16} className="spin" /> : <Share2 size={16} />}
+        {exporting ? 'Generating...' : readyShare?.format === 'pdf' ? 'Click to Send PDF' : 'Share PDF'}
       </button>
-      <button className="btn btn-primary" onClick={() => shareDocument('jpg')} disabled={exporting} style={{ background: '#128C7E', borderColor: '#128C7E' }}>
-        <Share2 size={16} />
-        {exporting ? '...' : 'Share JPG'}
+
+      <button 
+        className="btn btn-primary" 
+        onClick={() => shareDocument('jpg')} 
+        disabled={exporting} 
+        style={{ 
+          background: readyShare?.format === 'jpg' ? '#fff' : '#128C7E', 
+          color: readyShare?.format === 'jpg' ? '#000' : '#fff', 
+          borderColor: '#128C7E',
+          minWidth: '160px'
+        }}
+      >
+        {exporting ? <Loader2 size={16} className="spin" /> : <Share2 size={16} />}
+        {exporting ? 'Generating...' : readyShare?.format === 'jpg' ? 'Click to Send JPG' : 'Share JPG'}
       </button>
+
+      <style>{`
+        .spin { animation: spin 1s linear infinite; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      `}</style>
     </div>
-    </>
   );
 }

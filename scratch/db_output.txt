@@ -1,63 +1,66 @@
 --- invoices ---
-ID: 160c5df1-6595-4dde-8d7d-f88e39a09c95, Date: 2026-04-03, Doc Name: Tax Invoice 063, No: 063, Client: , Total: 0
-ID: 8de9fe3c-89be-41e6-a7c1-36b70bafc784, Date: 2026-04-04, Doc Name: Tax Invoice 069, No: 069, Client: , Total: 0
-ID: ad3bf39c-cdc6-4b3e-841d-1e4442838cff, Date: 2026-04-04, Doc Name: Tax Invoice 070, No: 070, Client: , Total: 0
-ID: 5baf4490-a940-454a-afcd-095576102b8d, Date: 2026-04-11, Doc Name: MIPALLOY PRIVATE LIMITED - 075, No: 075, Client: MIPALLOY PRIVATE LIMITED , Total: 14160
-ID: f02277e8-0d9a-4df0-9c67-0f17e0a6305d, Date: 2026-04-07, Doc Name: Serama Logistics Private Limited - 074, No: 074, Client: Serama Logistics Limited, Total: 26904
-ID: ccb010e2-6a1d-459d-beca-8b1968de8244, Date: 2026-04-04, Doc Name: SAKTHI AUTO ANCILLARY PRIVATE LIMITED - 073, No: 073, Client: SAKTHI AUTO ANCILLARY PRIVATE LIMITED, Total: 5310
-ID: 9a8c44a4-af03-42b3-a8be-1e28df9b0388, Date: 2026-04-03, Doc Name: Tax Invoice 062, No: 062, Client: , Total: 0
-ID: 20e759e4-dfdb-48ce-b0e8-b5f23da5deeb, Date: 2026-04-04, Doc Name: Tax Invoice 071, No: 071, Client: , Total: 0
-ID: 12859a90-3360-43f0-9586-b309dcbc0dfa, Date: 2026-04-04, Doc Name: Tax Invoice 072, No: 072, Client: , Total: 0
-ID: 919730d2-40b8-450b-98e2-76dc5a043a2a, Date: 2026-04-06, Doc Name: Tax Invoice 046, No: 046, Client: tns govt , Total: 552240
-ID: b4c4e974-3655-47a9-8635-dba18e7a3cdc, Date: 2026-04-06, Doc Name: Tax Invoice 048, No: 048, Client: , Total: 0
-ID: a53ecb93-ba65-45be-967f-db27afd4ac3d, Date: 2026-04-06, Doc Name: Tax Invoice 047, No: 047, Client: , Total: 0
-ID: 7ec2de24-3f7f-4bd4-928b-dbad095a9a77, Date: 2026-04-06, Doc Name: Tax Invoice 077, No: 077, Client: , Total: 0
-ID: 0760cf20-2e2c-4268-bd84-f1b5582903e1, Date: 2026-04-06, Doc Name: Tax Invoice 078, No: 078, Client: , Total: 0
-ID: bec3d9b3-5bb2-4515-a96b-48b71052d0d3, Date: 2026-04-06, Doc Name: Tax Invoice 079, No: 079, Client: , Total: 0
-ID: aeee6f08-0f94-4e03-898f-630035c58b7c, Date: 2026-04-06, Doc Name: Tax Invoice 088, No: 088, Client: , Total: 0
-ID: b3ca7a49-a3ee-4734-a2e2-6db6a28a7838, Date: 2026-04-06, Doc Name: Tax Invoice 080, No: 080, Client: , Total: 0
-ID: 927f13a7-fa35-4e99-8a62-2bbc99df1737, Date: 2026-04-06, Doc Name: Tax Invoice 081, No: 081, Client: , Total: 0
-ID: 92638d21-a4ed-4c8d-8cd1-8b6c4bc7872a, Date: 2026-04-06, Doc Name: Tax Invoice 082, No: 082, Client: , Total: 0
-ID: 72761e8f-a8d8-4985-be26-8ca1161fe4a9, Date: 2026-04-06, Doc Name: Tax Invoice 083, No: 083, Client: , Total: 0
-ID: 7a10f35a-29f1-4288-aa13-bf95ae43ad2c, Date: 2026-04-06, Doc Name: Tax Invoice 084, No: 084, Client: , Total: 0
-ID: d624372a-ffe6-4746-9063-7aa34ba2d2cb, Date: 2026-04-06, Doc Name: Tax Invoice 085, No: 085, Client: , Total: 0
-ID: c625b258-bbc5-4809-8628-a9a2a9d94100, Date: 2026-04-12, Doc Name: Tax Invoice 091, No: 091, Client: , Total: 212400
+ID: 153f1e75-a78b-43fc-961a-8736d13d7774, Date: 2026-05-09, Doc Name: ECI - 081, No: 081, Client: ECI DISPLAY INDIA PVT LTD , Total: 7080
+ID: a61e4e6f-e622-4ee0-b34b-cac531c05fb8, Date: 2026-06-01, Doc Name: Tax Invoice 090, No: 090, Client: INDIAN POWER PRESS ENGINEERS, Total: 57820
+ID: c3df617e-f585-4b8d-afe0-37ed669185af, Date: 2026-05-11, Doc Name: Tax Invoice 084, No: 084, Client: ECI DISPLAY INDIA PVT LTD , Total: 4720
+ID: 19830ba9-0525-4117-aae2-5bd4a39622ec, Date: 2026-04-26, Doc Name: Tax Invoice 079, No: 079, Client: fuso glass india pvt ltd, Total: 44840
+ID: c7998cff-75f2-4c8c-80d6-fb69d870528d, Date: 2026-04-17, Doc Name: Tax Invoice 076, No: 076, Client: ECI DISPLAY INDIA PRIVATE LIMITED, Total: 27730
+ID: 943ef9b1-5044-4ab8-95eb-588106ebaab0, Date: 2026-07-15, Doc Name: TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED - 101, No: 101, Client: TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED, Total: 70800
+ID: 2d88281b-1f3e-424e-ac34-64ee77b74290, Date: 2026-07-01, Doc Name: Tax Invoice 096, No: 096, Client: TATA STEEL COLORS PVT LTD, Total: 61360
+ID: eb53da38-d9e4-4771-be49-c8e1a127791c, Date: 2026-06-05, Doc Name: Tax Invoice 091, No: 091, Client: fuso glass india pvt ltd, Total: 36462
+ID: ac91e5a8-e427-44fb-b6fa-eb91369c2452, Date: 2026-04-25, Doc Name: Hi-lex - 077, No: 077, Client: HI-LEX INDIA PVT LTD, Total: 26550
+ID: 53ab84c3-6848-48f4-a024-984aa3f01bf7, Date: 2026-07-19, Doc Name: Laxmi acc, No: 102, Client: LAKSHMI AAC BLOCKS, Total: 70800
+ID: e3688183-acf3-4f77-8fc3-77da5685364a, Date: 2026-04-07, Doc Name: Serama Logistics Private Limited - 074, No: 074, Client: Serama Logistics Limited, Total: 26904
+ID: e0c91c57-81d7-491b-bfc0-291cd985fcc0, Date: 2026-07-01, Doc Name: NVH - 097, No: 097, Client: NVH INDIA AUTO PARTS LIMITED, Total: 15222
+ID: 8682905a-50ce-4957-84a7-a14d6e894b64, Date: 2026-06-05, Doc Name: Tax Invoice 092, No: 092, Client: K M C PETROCHEMICALS PRIVATE  LIMITED, Total: 4720
+ID: 0f0d3559-ca9c-4c67-a4bf-32438174ed2d, Date: 2026-05-25, Doc Name: Tax Invoice 086, No: 086, Client: ECI DISPLAY INDIA PVT LTD , Total: 4720
+ID: 05c6f492-e3d7-4868-9f46-621ca632f574, Date: 2026-05-15, Doc Name: Tax Invoice 085, No: 085, Client: SKS LIFT CARRIERS, Total: 94990
+ID: de9b1603-f818-48ad-b94f-e2f8fc54ff03, Date: 2026-04-25, Doc Name: Tax Invoice 078, No: 078, Client: fuso glass india pvt ltd, Total: 8260
+ID: 0a0ce9e5-d88a-4fbd-8116-e53976b6e523, Date: 2026-04-11, Doc Name: MIPALLOY PRIVATE LIMITED - 075, No: 075, Client: MIPALLOY PRIVATE LIMITED , Total: 14160
+ID: 4a7fc9c0-89c3-4687-a937-480d65574dec, Date: 2026-07-22, Doc Name: AMT - 103, No: 103, Client: AMERICAN TEC ELECTRONIC INDIA PVT LTD, Total: 16520
+ID: 2a5b59eb-e477-40fc-8724-ef3ee2153c95, Date: 2026-06-08, Doc Name: Tax Invoice 093, No: 093, Client: TATA STEEL COLORS PVT LTD, Total: 46020
+ID: 9f96b9b6-cbcd-47f4-9066-5fbf3198e1a7, Date: 2026-05-28, Doc Name: Tax Invoice 087, No: 087, Client: ECI DISPLAY INDIA PVT LTD , Total: 4130
+ID: 07ae138d-ec29-4fdf-9e0c-7a7db5c4c420, Date: 2026-05-06, Doc Name: NVH-080, No: 080, Client: NVH INDIA AUTO PARTS LIMITED, Total: 15222
+ID: dee218aa-a166-473a-8f7e-5a4d1225ff67, Date: 2026-07-08, Doc Name: Tax Invoice 098, No: 098, Client: DIFFERENT HAIR PRIVATE  LIMITED., Total: 5310
+ID: 48357749-46a3-4b3a-8a70-f2c41eefb84d, Date: 2026-04-04, Doc Name: SAKTHI AUTO ANCILLARY PRIVATE LIMITED - 073, No: 073, Client: SAKTHI AUTO ANCILLARY PRIVATE LIMITED, Total: 5310
+ID: 6c44535a-66ce-4f7b-9492-1771f5ba25cd, Date: 2026-07-08, Doc Name: Tax Invoice 099, No: 099, Client: FESTON SEV PRIVATE LIMITED., Total: 3540
+ID: a015eae0-ea98-414f-8e01-31d899de91f2, Date: 2026-06-15, Doc Name: Tax Invoice 094, No: 094, Client: FESTON SEV PRIVATE LIMITED., Total: 5664
+ID: ed60c9af-9968-4f68-8047-6c9b3d716dbc, Date: 2026-05-30, Doc Name: Tax Invoice 088, No: 088, Client: SKS LIFT CARRIERS, Total: 33040
+ID: 780de277-376b-480b-b112-68f89243a104, Date: 2026-05-11, Doc Name: AMT - 083, No: 083, Client: AMERICAN TEC ELECTRONIC INDIA PVT LTD, Total: 49560
+ID: 4b0e13e3-2956-47d5-beef-6b77c03133fc, Date: 2026-06-25, Doc Name: Tax Invoice 095, No: 095, Client: LIKU-TECH ENVIRONMENTAL SOLUTIONS (INDIA) PRIVATE LIMITED , Total: 12390
+ID: 380628b2-8935-4a36-ae6d-0e90d4203e18, Date: 2026-05-30, Doc Name: Tax Invoice 089, No: 089, Client: NVH INDIA AUTO PARTS LIMITED, Total: 15222
+ID: 0c5436b0-8fcf-4f6c-8933-3973cf9374ab, Date: 2026-07-10, Doc Name: SRI LITHI ENGINEERING - 100, No: 100, Client: SRI LITHI ENGINEERING, Total: 118000
 --- cashbills ---
-ID: 5e3736c5-c739-40d6-bbf9-ebf569faceb3, Date: 2026-04-04, Doc Name: Cash Bill 003, No: 003, Client: , Total: 0
-ID: bae3a7f7-e8a1-4922-9f7c-9c94b9a0491a, Date: 2026-04-04, Doc Name: Cash Bill 004, No: 004, Client: , Total: 0
-ID: e0407ad2-a840-4e1d-b61a-a1e298444822, Date: 2026-04-04, Doc Name: Cash Bill 005, No: 005, Client: , Total: 0
-ID: b68b296a-27a2-4eb2-8e71-861bec57c81d, Date: 2026-04-04, Doc Name: Cash Bill 006, No: 006, Client: , Total: 0
-ID: 86218805-8269-4fc8-8b2c-dbf58067702f, Date: 2026-04-04, Doc Name: Cash Bill 007, No: 007, Client: , Total: 0
-ID: 9b784349-05b1-4985-8b3d-c4600b4c7583, Date: 2026-04-04, Doc Name: Cash Bill 008, No: 008, Client: , Total: 0
-ID: f6cf5c76-2c53-4d9f-819d-15e7df77502d, Date: 2026-04-04, Doc Name: Cash Bill 009, No: 009, Client: , Total: 0
-ID: 44c93616-930b-4446-91b5-f7fbca702ef2, Date: 2026-04-06, Doc Name: Cash Bill 001, No: 001, Client: , Total: 0
-ID: 11d0873e-2252-4bef-9dcf-a436a1c8e2bf, Date: 2026-04-06, Doc Name: Cash Bill 002, No: 002, Client: , Total: 0
-ID: 63f3bbcf-e37d-456d-af02-5c036d46e4de, Date: 2026-04-12, Doc Name: Cash Bill 010, No: 010, Client: , Total: 120000
+ID: 96c6e91f-da34-4e3a-a1bc-8dd1750f8e39, Date: 2026-05-28, Doc Name: Cash Bill 007, No: 007, Client: SHEKINA METAL WORKS, Total: 44000
+ID: b5fa8c04-2f25-47ad-aca9-e592f7f09bb7, Date: 2026-04-10, Doc Name: Cash Bill 002, No: 002, Client: Capricorn Logistics Pvt Ltd, Total: 3000
+ID: 6ac4fd91-a636-4ec8-9f12-2202a7f9fd9a, Date: 2026-04-11, Doc Name: Cash Bill 003, No: 003, Client: Capricorn Logistics Pvt Ltd, Total: 3000
+ID: 1d0edf67-8189-4c3f-b36e-da8d6a1f431b, Date: 2026-04-15, Doc Name: Cash Bill 004, No: 004, Client: Capricorn Logistics Pvt Ltd, Total: 3000
+ID: bafecd02-59c3-4044-b077-43b22d62a643, Date: 2026-06-18, Doc Name: capricorn - 008, No: 008, Client: capricorn Logistics Pvt Ltd, Total: 4000
+ID: b62da56b-1e1c-42f5-8f02-8ccb181e7167, Date: 2026-06-19, Doc Name: capricorn - 009, No: 009, Client: capricorn Logistics Pvt Ltd, Total: 4000
+ID: e807becf-b9e5-404b-9675-ea97f3df8bfc, Date: 2026-06-23, Doc Name: Cash Bill 010, No: 010, Client: Paranthaman , , Total: 419750
+ID: 04073a82-bd19-4b21-9d10-95b4f333b976, Date: 2026-05-02, Doc Name: Raja_Sengadu - 006, No: 006, Client: Raga, Total: 29250
+ID: 5337ef25-5093-47ec-9674-279b95820be6, Date: 2026-07-08, Doc Name: Cash Bill 001, No: 001, Client: Ragu , Total: 94250
 --- quotations ---
-ID: c5e96edb-85fa-4dd9-9ae2-9974145f4859, Date: 2026-04-07, Doc Name: Wittur Elevator Components India - Quotation, No: N/A, Client: Wittur Elevator Components India , Total: undefined
-ID: 7f8894c0-3abc-4b66-a867-a3cde2c379c1, Date: 2026-04-07, Doc Name: Flender Drive System Private Limited - Quotation, No: N/A, Client: Flender Drive System Private Limited, Total: undefined
-ID: 43c35c78-85bd-4e78-901b-db13fba36007, Date: 2026-04-08, Doc Name: TATA STEEL COLORS PVT LTD - Quotation , No: N/A, Client: TATA STEEL COLORS PVT LTD., Total: undefined
-ID: 49f19ea9-174b-4168-8641-13c00139c118, Date: 2026-04-08, Doc Name: Mipalloy - Quotation, No: N/A, Client: MIPALLOY (Complete Competence in Copper), Total: undefined
-ID: df5c438c-b8c1-4ec8-8832-fddb53ab157b, Date: 2026-04-10, Doc Name: Quotation - BRADKEN INDIA PVT LTD,, No: N/A, Client: BRADKEN INDIA PVT LTD,, Total: undefined
-ID: 6a919e4b-7dbb-45f5-b891-5d8cb64b722e, Date: 2026-04-06, Doc Name: Quotation - Test Corp, No: N/A, Client: Test Corp, Total: undefined
-ID: f831c6c6-51bd-456e-a75c-8fc66b470701, Date: 2026-04-11, Doc Name: Quotation - Draft, No: N/A, Client: , Total: undefined
 --- delivery_chellans ---
-ID: 67360c79-01ab-42db-9102-06e6fd9d57ac, Date: 2026-04-06, Doc Name: DC OSC0001, No: OSC0001, Client: , Total: undefined
-ID: 3a373fe0-48d8-41ce-861b-d0b9d95c972a, Date: 2026-04-03, Doc Name: DC OSC0022, No: OSC0022, Client: , Total: undefined
-ID: 75c1c86f-5740-4c11-904c-e5399d4d48c4, Date: 2026-04-03, Doc Name: DC OSC0023, No: OSC0023, Client: AMERICAN TEC ELECTRONIC INDIA PRIVATE LIMITED, Total: undefined
-ID: 462de426-bc20-4d99-8c50-d6a3e3b54fd3, Date: 2026-04-03, Doc Name: DC OSC0024, No: OSC0024, Client: AMERICAN TEC ELECTRONIC INDIA PRIVATE LIMITED, Total: undefined
-ID: 4784d518-99ff-4426-b8e3-b9ea951a03af, Date: 2026-04-03, Doc Name: DC OSC0025, No: OSC0025, Client: , Total: undefined
-ID: 65323645-e7ef-4502-86ed-79b47b612a5f, Date: 2026-04-03, Doc Name: DC OSC0026, No: OSC0026, Client: , Total: undefined
-ID: 882844ca-c3e9-4ba1-8e20-ecb9a6c6ddbe, Date: 2026-04-03, Doc Name: DC OSC0027, No: OSC0027, Client: , Total: undefined
-ID: 6b31a554-94cb-4d01-a485-11069fd4f0dc, Date: 2026-04-03, Doc Name: DC OSC0028, No: OSC0028, Client: , Total: undefined
-ID: afe5ac3d-eb40-4490-9070-2af57ef658d6, Date: 2026-04-03, Doc Name: DC OSC0029, No: OSC0029, Client: , Total: undefined
-ID: 3c7f5d4d-94ab-4d66-9d74-0b31ad78b736, Date: 2026-04-03, Doc Name: DC OSC0030, No: OSC0030, Client: , Total: undefined
-ID: 43b3c902-675a-473a-ae0b-8af43e9ed6a1, Date: 2026-04-04, Doc Name: DC OSC0031, No: OSC0031, Client: , Total: undefined
-ID: 2996e14c-24ab-4ade-ab23-1c6d1d07862c, Date: 2026-04-04, Doc Name: DC OSC0032, No: OSC0032, Client: , Total: undefined
-ID: a3e95fb5-7090-4707-b10e-27f612ba0ac6, Date: 2026-04-04, Doc Name: DC OSC0033, No: OSC0033, Client: , Total: undefined
-ID: cff3261f-1e4c-42c1-8a25-a61f5aa5f4d9, Date: 2026-04-06, Doc Name: DC OSC0034, No: OSC0034, Client: , Total: undefined
-ID: 38d02db1-17e4-4ad8-9e97-275cd98597c5, Date: 2026-04-06, Doc Name: DC OSC0035, No: OSC0035, Client: , Total: undefined
-ID: 4cbfe274-7fa2-452f-9514-d0d21db3f061, Date: 2026-04-06, Doc Name: DC OSC0036, No: OSC0036, Client: , Total: undefined
-ID: 5b4fbc65-88e2-4adc-a21f-d3f8ea9bac26, Date: 2026-04-06, Doc Name: DC OSC0037, No: OSC0037, Client: , Total: undefined
-ID: 3170b137-b71f-427b-9a74-c9d03577e197, Date: 2026-04-09, Doc Name: DC OSC0039, No: OSC0039, Client: OM SARAVANA CRANES, Total: undefined
+ID: 2ae30475-50f9-4a62-a4bd-ae059a49c700, Date: 2026-04-17, Doc Name: SHREE ABIRAMI ENGGINEERING WORKS PRIVATE LIMITED - DC, No: OSC0042, Client: OM SARAVANA CRANES, Total: undefined
+ID: 61e7dcea-b0f1-4be0-9b3d-87e2f4465466, Date: 2026-05-01, Doc Name: Amt-Dc Return, No: OSC0043, Client: OM SARAVANA CRANES, Total: undefined
+ID: 21d22511-c855-4999-80c3-f8537595a6be, Date: 2026-05-08, Doc Name: INDOSOL SOLAR PVT LTD - DC_RETURN, No: OSC0046, Client: OM SARAVANA CRANES, Total: undefined
+ID: b4c5120c-35b7-4c9f-b1ba-388ae5636a49, Date: 2026-05-15, Doc Name: MANGADU -Return_DC, No: OSC0050, Client: OM SARAVANA CRANES, Total: undefined
+ID: c522b7f8-51b0-4f0f-b302-9f09b5c6c8c8, Date: 2026-07-14, Doc Name: TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED - Return DC, No: OSC0056, Client: OM SARAVANA CRANES, Total: undefined
+ID: 2d7ff0fd-081f-41e9-8935-f48cc2790763, Date: 2026-07-21, Doc Name: AMT - DC - 060, No: OSC0060, Client: OM SARAVANA CRANES PVT LTD, Total: undefined
+ID: 2934ca86-0bd8-43a8-abeb-525d53c5db5f, Date: 2026-05-15, Doc Name: HYUNDAI WIA - SENGADU, No: OSC0047, Client: HYUNDAI WIA , Total: undefined
+ID: 3bc64b8d-8261-4854-a888-1928e30aa6e4, Date: 2026-04-09, Doc Name: DC OSC0039, No: OSC0039, Client: OM SARAVANA CRANES, Total: undefined
+ID: 7b47f479-5e50-4ade-97c3-b4672f73a2e1, Date: 2026-07-18, Doc Name: LAKSHMI AAC BLOCKS - DC, No: OSC0057, Client: OM SARAVANA CRANES, Total: undefined
+ID: 01feb747-e092-410a-a515-a362fdcd9b30, Date: 2026-06-22, Doc Name:  ALLISON DC - 051, No: OSC0051, Client: Allison Transmission india pvt ltd, Total: undefined
+ID: 1d500eee-a0db-4447-b5ee-940988a686f9, Date: 2026-05-15, Doc Name: HYUNDAI WIA - SENGADU, No: OSC0044, Client: HYUNDAI WIA , Total: undefined
+ID: 9be4bbae-c33b-4cd0-81bd-a36fc7e02294, Date: 2026-05-15, Doc Name: MANGADU -Return_DC, No: OSC0048, Client: OM SARAVANA CRANES, Total: undefined
+ID: 100f1078-889d-49e9-95e4-08107335e344, Date: 2026-06-22, Doc Name: GURIT - OSC - DC - 052, No: OSC0052, Client: OM SARAVANA CRANES, Total: undefined
+ID: c4606c00-9f32-4000-b58a-e96736114a14, Date: 2026-07-14, Doc Name: LAKSHMI AAC BLOCKS - DC_055, No: OSC0055, Client: LAKSHMI AAC BLOCKS, Total: undefined
+ID: aea92561-fbd8-46ed-aa72-b80ec45f2227, Date: 2026-07-20, Doc Name: DC OSC0058, No: OSC0058, Client: 3D CONCEPT ANALYSIS AND DEVELOPMENT INDIA PVT LTD, Total: undefined
+ID: e31ecce3-02e9-4887-aa8c-d9140d2883b4, Date: 2026-04-17, Doc Name: SHREE ABIRAMI ENGGINEERING WORKS PRIVATE LIMITED - DC, No: OSC0041, Client: SHREE ABIRAMI ENGGINEERING WORKS PRIVATE LIMITED, Total: undefined
+ID: 7479be51-1272-4a51-8d9b-6aedc460ecf5, Date: 2026-04-15, Doc Name: DC OSC0040, No: OSC0040, Client: AMERICAN TEC ELECTRONICS INDIA PVT LTD, Total: undefined
+ID: 397e10e1-178f-4787-96dd-56d25c6bddeb, Date: 2026-05-01, Doc Name: Amt-Dc Return, No: OSC0045, Client: OM SARAVANA CRANES, Total: undefined
+ID: 18fab1d4-342b-4f66-a0fc-18401e9e8d4f, Date: 2026-05-15, Doc Name: 20 Ton Flt Return - DC, No: OSC0049, Client: OM SARAVANA CRANES, Total: undefined
+ID: b142e7f7-bafe-4b96-bc53-a24d1c51d9dd, Date: 2026-06-24, Doc Name: DC - FORD - LIUGONG , No: OSC0053, Client: FORD INDIA PVT LTD , Total: undefined
+ID: 69ae54c7-8028-4ff8-bcd3-3d2c333ecdbf, Date: 2026-07-14, Doc Name: TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED - DC , No: OSC0054, Client: TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED, Total: undefined
+ID: 64bc01a8-4990-4d39-82e8-01ab1aadf615, Date: 2026-07-21, Doc Name: AMT - DC - 059, No: OSC0059, Client: AMERICAN TEC ELECTRONIC INDIA PVT LTD, Total: undefined
 --- proforma_invoices ---
