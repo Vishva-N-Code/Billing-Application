@@ -75,7 +75,10 @@ function App() {
   useEffect(() => {
     async function initSync() {
       await initSettings();
-      await syncFromCloud();
+      // Dispatch sync-complete after init so pages re-fetch seeded data
+      setTimeout(() => window.dispatchEvent(new CustomEvent('sync-complete')), 100);
+      // Try cloud sync — gracefully ignore if Supabase is offline/paused
+      try { await syncFromCloud(); } catch (e) { console.warn('Cloud sync skipped:', e.message); }
     }
     initSync();
   }, []);

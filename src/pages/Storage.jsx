@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db, syncFromCloud, deleteInvoice, deleteQuotation, deleteProformaInvoice, deleteCashBill, deleteDc, updatePaymentStatus, deleteExperienceCertificate } from '../db';
+import { db, deleteInvoice, deleteQuotation, deleteProformaInvoice, deleteCashBill, deleteDc, updatePaymentStatus, deleteExperienceCertificate } from '../db';
 import { Trash2, ExternalLink, Search, Download, Loader2, FolderOpen, Coins, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
 import TaxInvoice from './TaxInvoice';
 import Quotation from './Quotation';
@@ -46,15 +46,32 @@ export default function Storage() {
   };
 
   useEffect(() => {
+    // Initial fetch from local IndexedDB
     fetchData();
-    // Trigger cloud sync immediately on mount so documents are downloaded from Supabase
-    syncFromCloud();
+
+    // Retry polling: DB v12 upgrade seeds data asynchronously.
+    // Poll every 500ms for up to 5s so we always catch the seeded docs,
+    // even when Supabase is offline (paused/CORS error).
+    let attempts = 0;
+    const retryInterval = setInterval(async () => {
+      attempts++;
+      const count = await db.invoices.count();
+      if (count > 0) {
+        fetchData();
+        clearInterval(retryInterval);
+      } else if (attempts >= 10) {
+        clearInterval(retryInterval);
+      }
+    }, 500);
 
     const handleSyncComplete = () => {
       fetchData();
     };
     window.addEventListener('sync-complete', handleSyncComplete);
-    return () => window.removeEventListener('sync-complete', handleSyncComplete);
+    return () => {
+      clearInterval(retryInterval);
+      window.removeEventListener('sync-complete', handleSyncComplete);
+    };
   }, []);
 
   const formatDate = (dateStr) => {
