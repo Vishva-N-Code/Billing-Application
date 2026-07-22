@@ -143,14 +143,19 @@ export async function initSettings() {
     const localInvoiceCount = await db.invoices.count();
     if (localInvoiceCount === 0 && seedInvoices) {
       console.log('Seeding initial documents into local database...');
-      if (seedInvoices.invoices && seedInvoices.invoices.length > 0) {
-        await db.invoices.bulkAdd(seedInvoices.invoices);
-      }
-      if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) {
-        await db.cashbills.bulkAdd(seedInvoices.cashbills);
-      }
-      if (seedInvoices.dcs && seedInvoices.dcs.length > 0) {
-        await db.deliveryChellans.bulkAdd(seedInvoices.dcs);
+      try {
+        const clean = (arr) => arr ? arr.map(({ id, ...rest }) => rest) : [];
+        if (seedInvoices.invoices && seedInvoices.invoices.length > 0) {
+          await db.invoices.bulkPut(clean(seedInvoices.invoices));
+        }
+        if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) {
+          await db.cashbills.bulkPut(clean(seedInvoices.cashbills));
+        }
+        if (seedInvoices.dcs && seedInvoices.dcs.length > 0) {
+          await db.deliveryChellans.bulkPut(clean(seedInvoices.dcs));
+        }
+      } catch (seedErr) {
+        console.error('Seeding exception:', seedErr);
       }
     }
 
