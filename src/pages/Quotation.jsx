@@ -12,7 +12,7 @@ export default function Quotation({ exportItem }) {
   const [activeTab, setActiveTab] = useState('form');
   const [savedQuotations, setSavedQuotations] = useState([]);
 
-  const [form, setForm] = useState({
+  const defaultForm = {
     docName: '',
     personInCharge: '',
     toCompany: '',
@@ -20,8 +20,18 @@ export default function Quotation({ exportItem }) {
     date: new Date().toISOString().split('T')[0],
     introText: 'We submit our lowest quotation for 3 ton Forklift for shift basis.',
     notes: ['GST 18% EXTRA.', 'Work will be initiated once PO Received.'],
+    showQtyCol: true,
+    showRateCol: true,
+    showPaymentInfo: true,
+    bankName: COMPANY.bankName,
+    bankAccount: COMPANY.bankAccount,
+    bankIFSC: COMPANY.bankIFSC,
+    bankBranch: COMPANY.bankBranch,
+    showTerms: false,
     termsAndConditions: '',
-  });
+  };
+
+  const [form, setForm] = useState(defaultForm);
 
   const [items, setItems] = useState([
     { description: '', quantity: '', rate: '', price: '' }
@@ -43,13 +53,15 @@ export default function Quotation({ exportItem }) {
   };
 
   const calcAmount = (item) => {
-    if (item.price !== undefined && item.price !== '' && item.price !== null && item.price !== 0 && item.price !== '0') {
+    if (item.price !== undefined && item.price !== '' && item.price !== null) {
       const p = parseFloat(item.price);
       if (!isNaN(p)) return p;
     }
-    const rate = parseFloat(item.rate) || 0;
-    const qty = parseFloat(item.quantity) || 0;
-    return rate * qty;
+    const rate = parseFloat(item.rate);
+    const qty = parseFloat(item.quantity);
+    if (!isNaN(rate) && !isNaN(qty)) return rate * qty;
+    if (!isNaN(rate) && isNaN(qty)) return rate;
+    return '';
   };
 
   const addNote = () => setForm({ ...form, notes: [...form.notes, ''] });
@@ -65,36 +77,90 @@ export default function Quotation({ exportItem }) {
     setSavedQuotations(data.reverse());
   };
 
+  const extractQuotationForm = (q, profile) => {
+    const defaultObj = {
+      ...defaultForm,
+      bankName: profile?.bankName || COMPANY.bankName,
+      bankAccount: profile?.bankAccount || COMPANY.bankAccount,
+      bankIFSC: profile?.bankIFSC || COMPANY.bankIFSC,
+      bankBranch: profile?.bankBranch || COMPANY.bankBranch,
+    };
+    if (!q) return defaultObj;
+
+    const dataForm = q.data?.form || (q.data && !Array.isArray(q.data) && !q.data.items ? q.data : null);
+
+    return {
+      ...defaultObj,
+      toCompany: q.clientCompany || q.toCompany || dataForm?.toCompany || dataForm?.clientCompany || '',
+      toAddress: q.clientAddress || q.toAddress || dataForm?.toAddress || dataForm?.clientAddress || '',
+      personInCharge: q.personInCharge || dataForm?.personInCharge || '',
+      docName: q.docName || dataForm?.docName || '',
+      date: q.date || dataForm?.date || defaultObj.date,
+      introText: dataForm?.introText !== undefined ? dataForm.introText : (q.introText || defaultObj.introText),
+      notes: dataForm?.notes || q.notes || defaultObj.notes,
+      showQtyCol: dataForm?.showQtyCol !== undefined ? Boolean(dataForm.showQtyCol) : (q.showQtyCol !== undefined ? Boolean(q.showQtyCol) : true),
+      showRateCol: dataForm?.showRateCol !== undefined ? Boolean(dataForm.showRateCol) : (q.showRateCol !== undefined ? Boolean(q.showRateCol) : true),
+      showPaymentInfo: dataForm?.showPaymentInfo !== undefined ? Boolean(dataForm.showPaymentInfo) : (q.showPaymentInfo !== undefined ? Boolean(q.showPaymentInfo) : true),
+      bankName: dataForm?.bankName || q.bankName || defaultObj.bankName,
+      bankAccount: dataForm?.bankAccount || q.bankAccount || defaultObj.bankAccount,
+      bankIFSC: dataForm?.bankIFSC || q.bankIFSC || defaultObj.bankIFSC,
+      bankBranch: dataForm?.bankBranch || q.bankBranch || defaultObj.bankBranch,
+      showTerms: dataForm?.showTerms !== undefined ? Boolean(dataForm.showTerms) : (q.showTerms !== undefined ? Boolean(q.showTerms) : Boolean(dataForm?.termsAndConditions || q.termsAndConditions)),
+      termsAndConditions: dataForm?.termsAndConditions !== undefined ? dataForm.termsAndConditions : (q.termsAndConditions !== undefined ? q.termsAndConditions : ''),
+      ...(dataForm || {}),
+      id: q.id || (dataForm && dataForm.id),
+    };
+  };
+
+  const extractQuotationItems = (q) => {
+    if (!q) return [{ description: '', quantity: '', rate: '', price: '' }];
+    if (Array.isArray(q.data?.items) && q.data.items.length > 0) return q.data.items;
+    if (Array.isArray(q.items) && q.items.length > 0) return q.items;
+    if (Array.isArray(q.data) && q.data.length > 0) return q.data;
+    if (q.grandTotal || q.amount) {
+      const amt = q.grandTotal || q.amount || 0;
+      return [{ description: q.docName || q.clientCompany || 'Services', quantity: 1, rate: amt, price: amt }];
+    }
+    return [{ description: '', quantity: '', rate: '', price: '' }];
+  };
+
+  const applyLoadedQuotation = (q, profile) => {
+    const parsedForm = extractQuotationForm(q, profile);
+    const parsedItems = extractQuotationItems(q);
+    const parsedSig = q?.data?.signature || q?.signature || null;
+    
+    setForm(parsedForm);
+    setItems(parsedItems);
+    if (parsedSig) setSignature(parsedSig);
+    setActiveTab('preview');
+  };
+
   useEffect(() => {
     const init = async () => {
+      await initSettings();
+      const profile = await getCompanyProfile();
+      if (profile) setCompanyProfile(profile);
+
       const itemToLoad = exportItem || location.state?.loadItem;
       if (itemToLoad) {
-        const q = itemToLoad;
-        setForm({ ...q.data.form, id: q.id });
-        setItems(q.data.items);
-        if (q.data.signature) setSignature(q.data.signature);
-        setActiveTab('preview');
-        
-        const profile = await getCompanyProfile();
-        if (profile) setCompanyProfile(profile);
+        applyLoadedQuotation(itemToLoad, profile || COMPANY);
         return;
       }
 
-      await initSettings();
       fetchSaved();
-      
-      const profile = await getCompanyProfile();
-      setCompanyProfile(profile);
-      setForm(f => ({ ...f, termsAndConditions: '' }));
+      setForm(f => ({
+        ...f,
+        bankName: profile?.bankName || COMPANY.bankName,
+        bankAccount: profile?.bankAccount || COMPANY.bankAccount,
+        bankIFSC: profile?.bankIFSC || COMPANY.bankIFSC,
+        bankBranch: profile?.bankBranch || COMPANY.bankBranch,
+      }));
     };
     init();
   }, [location.state, exportItem]);
 
   const loadQuotation = (q) => {
-    setForm({ ...q.data.form, id: q.id });
-    setItems(q.data.items);
-    if (q.data.signature) setSignature(q.data.signature);
-    setActiveTab('preview');
+    applyLoadedQuotation(q, companyProfile);
   };
 
   const handleDelete = async (id) => {
@@ -206,6 +272,17 @@ export default function Quotation({ exportItem }) {
                   value={form.introText} onChange={e => setForm({ ...form, introText: e.target.value })} />
               </div>
 
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', flexWrap: 'wrap' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <input type="checkbox" checked={form.showQtyCol} onChange={e => setForm({ ...form, showQtyCol: e.target.checked })} />
+                  <span>Show Quantity Column in Preview</span>
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 600 }}>
+                  <input type="checkbox" checked={form.showRateCol} onChange={e => setForm({ ...form, showRateCol: e.target.checked })} />
+                  <span>Show Rate Column in Preview</span>
+                </label>
+              </div>
+
               <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '8px', display: 'block' }}>Items</label>
               <div className="table-wrapper" style={{ marginBottom: '12px' }}>
                 <table className="table">
@@ -228,16 +305,16 @@ export default function Quotation({ exportItem }) {
                             value={item.description} onChange={e => updateItem(i, 'description', e.target.value)} />
                         </td>
                         <td>
-                          <input className="form-control" type="number" placeholder="0" style={{ textAlign: 'center' }}
+                          <input className="form-control" type="number" placeholder="Opt" style={{ textAlign: 'center' }}
                             value={item.quantity} onChange={e => updateItem(i, 'quantity', e.target.value)} />
                         </td>
                         <td>
-                          <input className="form-control" type="number" placeholder="0.00"
+                          <input className="form-control" type="number" placeholder="Opt"
                             value={item.rate} onChange={e => updateItem(i, 'rate', e.target.value)} />
                         </td>
                         <td>
                           <input className="form-control" type="number" placeholder="0.00"
-                            value={item.price || (item.quantity && item.rate ? calcAmount(item) : '')}
+                            value={item.price !== undefined && item.price !== '' ? item.price : calcAmount(item)}
                             onChange={e => updateItem(i, 'price', e.target.value)} />
                         </td>
                         <td>
@@ -270,11 +347,59 @@ export default function Quotation({ exportItem }) {
             </div>
 
             <div className="card" style={{ marginBottom: '16px' }}>
-              <div className="card-title">Terms & Conditions</div>
-              <div className="form-group mb-0">
-                <textarea className="form-control" rows={3} placeholder="Add terms and conditions..."
-                  value={form.termsAndConditions} onChange={e => setForm({ ...form, termsAndConditions: e.target.value })} />
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>Payment Information (Optional)</span>
               </div>
+              <div className="form-group" style={{ marginBottom: '12px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600 }}>
+                  <input type="checkbox" checked={form.showPaymentInfo}
+                    onChange={e => setForm({ ...form, showPaymentInfo: e.target.checked })} />
+                  <span>Display Payment Information in Quotation</span>
+                </label>
+              </div>
+              {form.showPaymentInfo && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '8px', paddingTop: '12px', borderTop: '1px solid var(--border-color, #e2e8f0)' }}>
+                  <div className="form-group mb-0">
+                    <label>Bank Name</label>
+                    <input className="form-control" value={form.bankName}
+                      onChange={e => setForm({ ...form, bankName: e.target.value })} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label>Account Number</label>
+                    <input className="form-control" value={form.bankAccount}
+                      onChange={e => setForm({ ...form, bankAccount: e.target.value })} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label>IFSC Code</label>
+                    <input className="form-control" value={form.bankIFSC}
+                      onChange={e => setForm({ ...form, bankIFSC: e.target.value })} />
+                  </div>
+                  <div className="form-group mb-0">
+                    <label>Branch</label>
+                    <input className="form-control" value={form.bankBranch}
+                      onChange={e => setForm({ ...form, bankBranch: e.target.value })} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>Terms &amp; Conditions (Optional)</span>
+              </div>
+              <div className="form-group" style={{ marginBottom: '8px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: 600 }}>
+                  <input type="checkbox" checked={form.showTerms}
+                    onChange={e => setForm({ ...form, showTerms: e.target.checked })} />
+                  <span>Display Terms &amp; Conditions in Quotation</span>
+                </label>
+              </div>
+              {form.showTerms && (
+                <div className="form-group mb-0" style={{ marginTop: '8px' }}>
+                  <textarea className="form-control" rows={3} placeholder="Add terms and conditions..."
+                    value={form.termsAndConditions} onChange={e => setForm({ ...form, termsAndConditions: e.target.value })} />
+                </div>
+              )}
             </div>
 
             <div className="card">
@@ -289,6 +414,10 @@ export default function Quotation({ exportItem }) {
                 {(() => {
                   const itemsPerPage = 15;
                   const totalPages = Math.ceil(Math.max(1, items.length) / itemsPerPage);
+                  const hasQty = items.some(item => item.quantity && item.quantity.toString().trim() !== '');
+                  const hasRate = items.some(item => item.rate && item.rate.toString().trim() !== '');
+                  const displayQty = form.showQtyCol && hasQty;
+                  const displayRate = form.showRateCol && hasRate;
                   
                   return Array.from({ length: totalPages }, (_, pageIndex) => {
                     const pageItems = items.slice(pageIndex * itemsPerPage, (pageIndex + 1) * itemsPerPage);
@@ -353,8 +482,8 @@ export default function Quotation({ exportItem }) {
                               <tr>
                                 <th style={{ width: '45px', textAlign: 'center' }}>S.No</th>
                                 <th>Description</th>
-                                <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
-                                <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
+                                {displayQty && <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>}
+                                {displayRate && <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>}
                                 <th style={{ width: '130px', textAlign: 'right' }}>Amount</th>
                               </tr>
                             </thead>
@@ -364,17 +493,19 @@ export default function Quotation({ exportItem }) {
                                 return (
                                   <tr key={i}>
                                     <td style={{ textAlign: 'center' }}>{pageIndex * itemsPerPage + i + 1}</td>
-                                    <td>{item.description || '—'}</td>
-                                    <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
-                                    <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
-                                      {item.rate ? (
-                                        <>
-                                          <span style={{ float: 'left' }}>Rs.</span>
-                                          <span style={{ float: 'right' }}>{formatCurrency(item.rate)}</span>
-                                          <div style={{ clear: 'both' }} />
-                                        </>
-                                      ) : '—'}
-                                    </td>
+                                    <td>{item.description || ''}</td>
+                                    {displayQty && <td style={{ textAlign: 'center' }}>{item.quantity || ''}</td>}
+                                    {displayRate && (
+                                      <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
+                                        {item.rate ? (
+                                          <>
+                                            <span style={{ float: 'left' }}>Rs.</span>
+                                            <span style={{ float: 'right' }}>{formatCurrency(item.rate)}</span>
+                                            <div style={{ clear: 'both' }} />
+                                          </>
+                                        ) : ''}
+                                      </td>
+                                    )}
                                     <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
                                       {amount ? (
                                         <>
@@ -382,7 +513,7 @@ export default function Quotation({ exportItem }) {
                                           <span style={{ float: 'right' }}>{formatCurrency(amount)}</span>
                                           <div style={{ clear: 'both' }} />
                                         </>
-                                      ) : '—'}
+                                      ) : ''}
                                     </td>
                                   </tr>
                                 );
@@ -396,7 +527,7 @@ export default function Quotation({ exportItem }) {
                               <hr className="doc-divider-thin" />
 
                               {/* Notes */}
-                              {form.notes.length > 0 && (
+                              {form.notes && form.notes.filter(n => n).length > 0 && (
                                 <div className="quote-note">
                                   <h4>NOTE:</h4>
                                   <ul style={{ paddingLeft: '20px', margin: 0 }}>
@@ -407,10 +538,25 @@ export default function Quotation({ exportItem }) {
                                 </div>
                               )}
 
-                              {/* Terms and Conditions */}
-                              {form.termsAndConditions && (
-                                <div style={{ marginTop: '16px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                                  <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
+                              {/* Payment Information - Positioned below Notes */}
+                              {form.showPaymentInfo && (
+                                <div style={{ marginTop: '12px', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '10px 14px', backgroundColor: '#f8fafc' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.8rem', color: '#1e293b', marginBottom: '6px', textDecoration: 'underline' }}>
+                                    PAYMENT INFORMATION:
+                                  </div>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 16px', fontSize: '0.78rem', color: '#334155' }}>
+                                    <div><strong>Bank Name:</strong> {form.bankName || companyProfile.bankName}</div>
+                                    <div><strong>Account No:</strong> {form.bankAccount || companyProfile.bankAccount}</div>
+                                    <div><strong>IFSC Code:</strong> {form.bankIFSC || companyProfile.bankIFSC}</div>
+                                    <div><strong>Branch:</strong> {form.bankBranch || companyProfile.bankBranch}</div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Terms and Conditions - Positioned below Payment Information */}
+                              {form.showTerms && form.termsAndConditions && (
+                                <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS &amp; CONDITIONS:</div>
                                   <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
                                     {form.termsAndConditions}
                                   </div>

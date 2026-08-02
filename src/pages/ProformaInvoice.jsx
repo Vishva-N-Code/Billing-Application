@@ -12,7 +12,7 @@ export default function ProformaInvoice({ exportItem }) {
   const [activeTab, setActiveTab] = useState('form');
   const [savedProformas, setSavedProformas] = useState([]);
 
-  const [form, setForm] = useState({
+  const defaultForm = {
     docName: '',
     invoiceNo: '',
     clientCompany: '',
@@ -23,7 +23,9 @@ export default function ProformaInvoice({ exportItem }) {
       items: [{ date: '', description: '', timesheetNo: '', quantity: '', rate: '' }]
     }],
     termsAndConditions: '',
-  });
+  };
+
+  const [form, setForm] = useState(defaultForm);
 
   const [signature, setSignature] = useState(null);
   const [companyProfile, setCompanyProfile] = useState(COMPANY);
@@ -33,15 +35,35 @@ export default function ProformaInvoice({ exportItem }) {
     setSavedProformas(data.reverse());
   };
 
+  const extractProformaForm = (pf) => {
+    if (!pf) return defaultForm;
+    const dataForm = pf.data?.form || (pf.data && !Array.isArray(pf.data) ? pf.data : null);
+
+    return {
+      ...defaultForm,
+      docName: pf.docName || dataForm?.docName || '',
+      invoiceNo: pf.invoiceNo || dataForm?.invoiceNo || '',
+      date: pf.date || dataForm?.date || defaultForm.date,
+      clientCompany: pf.clientCompany || dataForm?.clientCompany || '',
+      clientAddress: pf.clientAddress || dataForm?.clientAddress || '',
+      configs: dataForm?.configs || pf.configs || defaultForm.configs,
+      ...(dataForm || {}),
+      id: pf.id || (dataForm && dataForm.id),
+    };
+  };
+
+  const applyLoadedProforma = (pf) => {
+    setForm(extractProformaForm(pf));
+    const sig = pf.data?.signature || pf.signature || null;
+    if (sig) setSignature(sig);
+    setActiveTab('preview');
+  };
+
   useEffect(() => {
     const init = async () => {
       const itemToLoad = exportItem || location.state?.loadItem;
       if (itemToLoad) {
-        const pf = itemToLoad;
-        setForm({ ...pf.data.form, id: pf.id });
-        if (pf.data.signature) setSignature(pf.data.signature);
-        setActiveTab('preview');
-        
+        applyLoadedProforma(itemToLoad);
         const profile = await getCompanyProfile();
         if (profile) setCompanyProfile(profile);
         return;
@@ -60,9 +82,7 @@ export default function ProformaInvoice({ exportItem }) {
   }, [location.state, exportItem]);
 
   const loadProforma = (pf) => {
-    setForm({ ...pf.data.form, id: pf.id });
-    if (pf.data.signature) setSignature(pf.data.signature);
-    setActiveTab('preview');
+    applyLoadedProforma(pf);
   };
 
   const handleDelete = async (id) => {

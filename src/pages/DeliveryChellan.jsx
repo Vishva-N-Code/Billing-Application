@@ -174,15 +174,7 @@ export default function DeliveryChellan({ exportItem }) {
     const init = async () => {
       const itemToLoad = exportItem || location.state?.loadItem;
       if (itemToLoad) {
-        const dc = itemToLoad;
-        if (dc.data.form) {
-          setForm({ ...dc.data.form, id: dc.id });
-          if (dc.data.signature) setSignature(dc.data.signature);
-        } else {
-          setForm({ ...dc.data, id: dc.id });
-        }
-        setActiveTab('preview');
-        
+        applyLoadedDc(itemToLoad);
         const profile = await getCompanyProfile();
         if (profile) setCompanyProfile(profile);
         return;
@@ -213,13 +205,7 @@ export default function DeliveryChellan({ exportItem }) {
   }, [location.state, exportItem]);
 
   const loadDc = (dc) => {
-    if (dc.data.form) {
-      setForm({ ...dc.data.form, id: dc.id });
-      if (dc.data.signature) setSignature(dc.data.signature);
-    } else {
-      setForm({ ...dc.data, id: dc.id }); // Legacy format without signature
-    }
-    setActiveTab('preview');
+    applyLoadedDc(dc);
   };
 
   const handleDelete = async (id) => {

@@ -12,7 +12,7 @@ export default function ExperienceCertificate({ exportItem }) {
   const [activeTab, setActiveTab] = useState('form');
   const [savedCerts, setSavedCerts] = useState([]);
 
-  const [form, setForm] = useState({
+  const defaultForm = {
     docName: '',
     driverName: '',
     fatherName: '',
@@ -24,7 +24,9 @@ export default function ExperienceCertificate({ exportItem }) {
     toMonth: 'till date',
     toYear: '',
     issueDate: new Date().toISOString().split('T')[0],
-  });
+  };
+
+  const [form, setForm] = useState(defaultForm);
 
   const [signature, setSignature] = useState(null);
   const [companyProfile, setCompanyProfile] = useState(COMPANY);
@@ -34,15 +36,32 @@ export default function ExperienceCertificate({ exportItem }) {
     setSavedCerts(data.reverse());
   };
 
+  const extractCertForm = (cert) => {
+    if (!cert) return defaultForm;
+    const dataForm = cert.data?.form || (cert.data && !Array.isArray(cert.data) ? cert.data : null);
+
+    return {
+      ...defaultForm,
+      docName: cert.docName || dataForm?.docName || '',
+      driverName: cert.driverName || dataForm?.driverName || '',
+      issueDate: cert.date || dataForm?.issueDate || dataForm?.date || defaultForm.issueDate,
+      ...(dataForm || {}),
+      id: cert.id || (dataForm && dataForm.id),
+    };
+  };
+
+  const applyLoadedCert = (cert) => {
+    setForm(extractCertForm(cert));
+    const sig = cert.data?.signature || cert.signature || null;
+    if (sig) setSignature(sig);
+    setActiveTab('preview');
+  };
+
   useEffect(() => {
     const init = async () => {
       const itemToLoad = exportItem || location.state?.loadItem;
       if (itemToLoad) {
-        const cert = itemToLoad;
-        setForm({ ...cert.data.form, id: cert.id });
-        if (cert.data.signature) setSignature(cert.data.signature);
-        setActiveTab('preview');
-        
+        applyLoadedCert(itemToLoad);
         const profile = await getCompanyProfile();
         if (profile) setCompanyProfile(profile);
         return;
@@ -58,9 +77,7 @@ export default function ExperienceCertificate({ exportItem }) {
   }, [location.state, exportItem]);
 
   const loadCert = (cert) => {
-    setForm({ ...cert.data.form, id: cert.id });
-    if (cert.data.signature) setSignature(cert.data.signature);
-    setActiveTab('preview');
+    applyLoadedCert(cert);
   };
 
   const handleDelete = async (id) => {
