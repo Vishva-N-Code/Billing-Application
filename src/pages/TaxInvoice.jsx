@@ -17,7 +17,7 @@ export default function TaxInvoice({ exportItem }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [showNewCustomerPrompt, setShowNewCustomerPrompt] = useState(false);
 
-  const defaultForm = {
+  const [form, setForm] = useState({
     docName: '',
     invoiceNo: '',
     date: new Date().toISOString().split('T')[0],
@@ -32,9 +32,7 @@ export default function TaxInvoice({ exportItem }) {
     vendorCode: '',
     gstType: 'cgst_sgst', // 'cgst_sgst' or 'igst'
     termsAndConditions: '',
-  };
-
-  const [form, setForm] = useState(defaultForm);
+  });
 
   const [items, setItems] = useState([
     { description: '', rate: '', unitType: 'shifts', quantity: '', amount: '' }
@@ -43,42 +41,6 @@ export default function TaxInvoice({ exportItem }) {
   const [signature, setSignature] = useState(null);
   const [isFetchingInfo, setIsFetchingInfo] = useState(false);
   const [companyProfile, setCompanyProfile] = useState(COMPANY);
-
-  const extractInvoiceForm = (inv) => {
-    if (!inv) return defaultForm;
-    const dataForm = inv.data?.form || (inv.data && !Array.isArray(inv.data) && !inv.data.items ? inv.data : null);
-
-    return {
-      ...defaultForm,
-      docName: inv.docName || dataForm?.docName || '',
-      invoiceNo: inv.invoiceNo || dataForm?.invoiceNo || '',
-      date: inv.date || dataForm?.date || defaultForm.date,
-      billingCompany: inv.clientCompany || inv.billingCompany || dataForm?.billingCompany || dataForm?.clientCompany || '',
-      billingAddress: inv.clientAddress || inv.billingAddress || dataForm?.billingAddress || dataForm?.clientAddress || '',
-      billingGstin: inv.clientGstin || inv.billingGstin || dataForm?.billingGstin || dataForm?.clientGstin || '',
-      ...(dataForm || {}),
-      id: inv.id || (dataForm && dataForm.id),
-    };
-  };
-
-  const extractInvoiceItems = (inv) => {
-    if (!inv) return [{ description: '', rate: '', unitType: 'shifts', quantity: '', amount: '' }];
-    if (Array.isArray(inv.data?.items) && inv.data.items.length > 0) return inv.data.items;
-    if (Array.isArray(inv.items) && inv.items.length > 0) return inv.items;
-    if (Array.isArray(inv.data) && inv.data.length > 0) return inv.data;
-    if (inv.grandTotal) {
-      return [{ description: inv.docName || inv.clientCompany || 'Services', rate: inv.grandTotal, unitType: 'shifts', quantity: 1, amount: inv.grandTotal }];
-    }
-    return [{ description: '', rate: '', unitType: 'shifts', quantity: '', amount: '' }];
-  };
-
-  const applyLoadedInvoice = (inv) => {
-    setForm(extractInvoiceForm(inv));
-    setItems(extractInvoiceItems(inv));
-    const sig = inv.data?.signature || inv.signature || null;
-    if (sig) setSignature(sig);
-    setActiveTab('preview');
-  };
 
   const GST_STATE_CODES = {
     '01': 'Jammu & Kashmir', '02': 'Himachal Pradesh', '03': 'Punjab', '04': 'Chandigarh',
@@ -92,47 +54,35 @@ export default function TaxInvoice({ exportItem }) {
     '38': 'Ladakh'
   };
 
-  const autoDetectGstType = (gstinVal) => {
-    if (!gstinVal || gstinVal.length < 2) return null;
-    const clientStateCode = gstinVal.trim().substring(0, 2);
-    if (!/^\d{2}$/.test(clientStateCode)) return null;
-
-    const companyStateCode = (companyProfile?.gstin && companyProfile.gstin.length >= 2 && /^\d{2}$/.test(companyProfile.gstin.substring(0, 2)))
-      ? companyProfile.gstin.substring(0, 2)
-      : '33';
-
-    return clientStateCode === companyStateCode ? 'cgst_sgst' : 'igst';
-  };
-
   // Modern fetch implementation for auto-fill based on local database ONLY to preserve explicit user entry
   const handleInternetFetch = async (query, type) => {
     if (!query || query.length < 3) return;
     
-    setIsFetchingInfo(true);
-    try {
-      if (type === 'company' || type === 'gstin') {
-        const found = customers.find(c => 
-          (c.companyName && c.companyName.toLowerCase().includes(query.toLowerCase())) ||
-          (c.gstin && c.gstin.toLowerCase().includes(query.toLowerCase()))
-        );
-        if (found) {
-          const detectedGstType = autoDetectGstType(found.gstin);
-          setForm(prev => ({
-            ...prev,
-            billingCompany: found.companyName || prev.billingCompany,
-            billingGstin: found.gstin || prev.billingGstin,
-            billingAddress: found.address || prev.billingAddress,
-            billingMobile: found.mobile || prev.billingMobile,
-            billingWebsite: found.website || prev.billingWebsite,
-            vendorCode: found.vendorCode || prev.vendorCode,
-            ...(detectedGstType ? { gstType: detectedGstType } : {})
-          }));
-        }
-      }
-    } catch (err) {
-      console.error('Fetch error:', err);
-    } finally {
-      setIsFetchingInfo(false);
+    // First search in local DB
+    const allCustomers = await db.customers.toArray();
+    const localMatch = type === 'gstin' 
+      ? allCustomers.find(c => c.gstin.toUpperCase() === query.toUpperCase())
+      : allCustomers.find(c => c.companyName.toLowerCase() === query.toLowerCase());
+
+    if (localMatch) {
+      setForm(f => ({
+        ...f,
+        billingCompany: localMatch.companyName,
+        billingGstin: localMatch.gstin,
+        billingAddress: localMatch.address,
+        billingMobile: localMatch.mobile || '',
+        billingWebsite: localMatch.website || '',
+        vendorCode: localMatch.vendorCode || '',
+        gstType: localMatch.gstin?.startsWith(COMPANY.gstin.substring(0, 2)) ? 'cgst_sgst' : 'igst'
+      }));
+      return;
+    }
+
+    // Auto detect GST-TYPE cleanly if they manually enter an accurate GSTIN
+    if (type === 'gstin' && query.length >= 2) {
+      const stateCode = query.substring(0, 2);
+      const autoGstType = stateCode === companyProfile.gstin.substring(0, 2) ? 'cgst_sgst' : 'igst';
+      setForm(f => ({ ...f, gstType: autoGstType }));
     }
   };
 
@@ -146,7 +96,14 @@ export default function TaxInvoice({ exportItem }) {
       const itemToLoad = exportItem || location.state?.loadItem;
       
       if (itemToLoad) {
-        applyLoadedInvoice(itemToLoad);
+        // Load data immediately for export
+        const inv = itemToLoad;
+        setForm({ ...inv.data.form, id: inv.id });
+        setItems(inv.data.items);
+        if (inv.data.signature) setSignature(inv.data.signature);
+        setActiveTab('preview');
+        
+        // Parallel load essential company profile
         const profile = await getCompanyProfile();
         if (profile) setCompanyProfile(profile);
         return;
@@ -167,7 +124,10 @@ export default function TaxInvoice({ exportItem }) {
   }, [location.state, exportItem]);
 
   const loadInvoice = (inv) => {
-    applyLoadedInvoice(inv);
+    setForm({ ...inv.data.form, id: inv.id });
+    setItems(inv.data.items);
+    if (inv.data.signature) setSignature(inv.data.signature);
+    setActiveTab('preview');
   };
 
   const handleDelete = async (id) => {
@@ -195,16 +155,10 @@ export default function TaxInvoice({ exportItem }) {
   };
 
   const handleGstinSearch = (val) => {
-    const upperGstin = val.toUpperCase();
-    const detectedGstType = autoDetectGstType(upperGstin);
-    setForm(prev => ({
-      ...prev,
-      billingGstin: upperGstin,
-      ...(detectedGstType ? { gstType: detectedGstType } : {})
-    }));
+    setForm({ ...form, billingGstin: val.toUpperCase() });
     if (val.length >= 5) {
       const matches = customers.filter(c =>
-        (c.gstin || '').toLowerCase().includes(val.toLowerCase())
+        c.gstin.toLowerCase().includes(val.toLowerCase())
       );
       if (matches.length > 0) {
         setSuggestions(matches);
@@ -223,17 +177,15 @@ export default function TaxInvoice({ exportItem }) {
   };
 
   const selectCustomer = (customer) => {
-    const detectedGstType = autoDetectGstType(customer.gstin);
-    setForm(prev => ({
-      ...prev,
+    setForm({
+      ...form,
       billingCompany: customer.companyName || customer.company_name,
-      billingGstin: customer.gstin || '',
-      billingAddress: customer.address || '',
+      billingGstin: customer.gstin,
+      billingAddress: customer.address,
       billingMobile: customer.mobile || '',
       billingWebsite: customer.website || '',
       vendorCode: customer.vendorCode || '',
-      ...(detectedGstType ? { gstType: detectedGstType } : {})
-    }));
+    });
     setShowSuggestions(false);
     setShowNewCustomerPrompt(false);
   };
@@ -455,11 +407,6 @@ export default function TaxInvoice({ exportItem }) {
                   onChange={e => handleGstinSearch(e.target.value)}
                   onBlur={() => { handleInternetFetch(form.billingGstin, 'gstin'); setTimeout(() => setShowSuggestions(false), 200); }}
                 />
-                {form.billingGstin && form.billingGstin.length >= 2 && (
-                  <div style={{ fontSize: '0.8rem', marginTop: '4px', color: '#0066cc', fontWeight: '500' }}>
-                    State: {GST_STATE_CODES[form.billingGstin.trim().substring(0, 2)] || 'Unknown'} — {form.gstType === 'cgst_sgst' ? 'Intra-State (CGST 9% + SGST 9% auto-selected)' : 'Inter-State (IGST 18% auto-selected)'}
-                  </div>
-                )}
                 {showSuggestions && suggestions.length > 0 && (
                   <div className="autocomplete-dropdown">
                     {suggestions.map(c => (

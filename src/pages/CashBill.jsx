@@ -12,16 +12,14 @@ export default function CashBill({ exportItem }) {
   const [activeTab, setActiveTab] = useState('form');
   const [savedCashBills, setSavedCashBills] = useState([]);
 
-  const defaultForm = {
+  const [form, setForm] = useState({
     docName: '',
     billNo: '',
     clientCompany: '',
     clientAddress: '',
     date: new Date().toISOString().split('T')[0],
     termsAndConditions: '',
-  };
-
-  const [form, setForm] = useState(defaultForm);
+  });
 
   const [items, setItems] = useState([
     { date: '', description: '', quantity: '', rate: '', amount: '' }
@@ -35,47 +33,16 @@ export default function CashBill({ exportItem }) {
     setSavedCashBills(data.reverse());
   };
 
-  const extractCashBillForm = (bill) => {
-    if (!bill) return defaultForm;
-    const dataForm = bill.data?.form || (bill.data && !Array.isArray(bill.data) && !bill.data.items ? bill.data : null);
-
-    return {
-      ...defaultForm,
-      docName: bill.docName || dataForm?.docName || '',
-      billNo: bill.billNo || dataForm?.billNo || '',
-      date: bill.date || dataForm?.date || defaultForm.date,
-      clientCompany: bill.clientCompany || dataForm?.clientCompany || '',
-      clientAddress: bill.clientAddress || dataForm?.clientAddress || '',
-      ...(dataForm || {}),
-      id: bill.id || (dataForm && dataForm.id),
-    };
-  };
-
-  const extractCashBillItems = (bill) => {
-    if (!bill) return [{ date: '', description: '', quantity: '', rate: '', amount: '' }];
-    if (Array.isArray(bill.data?.items) && bill.data.items.length > 0) return bill.data.items;
-    if (Array.isArray(bill.items) && bill.items.length > 0) return bill.items;
-    if (Array.isArray(bill.data) && bill.data.length > 0) return bill.data;
-    if (bill.grandTotal || bill.amount) {
-      const amt = bill.grandTotal || bill.amount || 0;
-      return [{ date: bill.date || '', description: bill.docName || bill.clientCompany || 'Services', quantity: 1, rate: amt, amount: amt }];
-    }
-    return [{ date: '', description: '', quantity: '', rate: '', amount: '' }];
-  };
-
-  const applyLoadedBill = (bill) => {
-    setForm(extractCashBillForm(bill));
-    setItems(extractCashBillItems(bill));
-    const sig = bill.data?.signature || bill.signature || null;
-    if (sig) setSignature(sig);
-    setActiveTab('preview');
-  };
-
   useEffect(() => {
     const init = async () => {
       const itemToLoad = exportItem || location.state?.loadItem;
       if (itemToLoad) {
-        applyLoadedBill(itemToLoad);
+        const bill = itemToLoad;
+        setForm({ ...bill.data.form, id: bill.id });
+        setItems(bill.data.items);
+        if (bill.data.signature) setSignature(bill.data.signature);
+        setActiveTab('preview');
+        
         const profile = await getCompanyProfile();
         if (profile) setCompanyProfile(profile);
         return;
@@ -97,7 +64,10 @@ export default function CashBill({ exportItem }) {
   }, [location.state, exportItem]);
 
   const loadBill = (bill) => {
-    applyLoadedBill(bill);
+    setForm({ ...bill.data.form, id: bill.id });
+    setItems(bill.data.items);
+    if (bill.data.signature) setSignature(bill.data.signature);
+    setActiveTab('preview');
   };
 
   const handleDelete = async (id) => {
