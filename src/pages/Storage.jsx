@@ -36,8 +36,13 @@ export default function Storage() {
       const isZeroTotal = doc.grandTotal === 0 || doc.grandTotal == null;
       return !(isClientEmpty && isZeroTotal);
     };
+    const isCleanQuotation = (q) => {
+      const docName = q.docName || q.data?.form?.docName || '';
+      const client = q.clientCompany || q.toCompany || q.data?.form?.toCompany || q.data?.form?.billingCompany || '';
+      return docName.trim() !== '' || client.trim() !== '';
+    };
     setInvoices((await db.invoices.toArray()).filter(isClean).reverse());
-    setQuotations((await db.quotations.toArray()).filter(isClean).reverse());
+    setQuotations((await db.quotations.toArray()).filter(isCleanQuotation).reverse());
     setProformas((await db.proformaInvoices.toArray()).filter(isClean).reverse());
     setCashBills((await db.cashbills.toArray()).filter(isClean).reverse());
     setDcs((await db.deliveryChellans.toArray()).reverse());

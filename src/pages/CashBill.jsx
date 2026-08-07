@@ -320,8 +320,8 @@ export default function CashBill({ exportItem }) {
                       <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
                       <th>Description</th>
                       <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
-                      <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
-                      <th style={{ width: '130px', textAlign: 'right' }}>Amount</th>
+                      <th style={{ width: '135px', textAlign: 'right', whiteSpace: 'nowrap' }}>Rate</th>
+                      <th style={{ width: '135px', textAlign: 'right', whiteSpace: 'nowrap' }}>Amount</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -333,25 +333,28 @@ export default function CashBill({ exportItem }) {
                         <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{formatDate(item.date)}</td>
                         <td>{item.description || '—'}</td>
                         <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
-                        <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
-                          <span style={{ float: 'left' }}>Rs.</span>
-                          <span style={{ float: 'right' }}>{formatCurrency(item.rate)}</span>
-                          <div style={{ clear: 'both' }} />
+                        <td className="amount-col" style={{ padding: '8px 10px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 500 }}>Rs.</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{formatCurrency(item.rate)}</span>
+                          </div>
                         </td>
-                        <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
-                          <span style={{ float: 'left' }}>Rs.</span>
-                          <span style={{ float: 'right' }}>{formatCurrency(calcAmount(item))}</span>
-                          <div style={{ clear: 'both' }} />
+                        <td className="amount-col" style={{ padding: '8px 10px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 500 }}>Rs.</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{formatCurrency(calcAmount(item))}</span>
+                          </div>
                         </td>
                       </tr>
                     )})}
                     {isLastPage && (
                       <tr style={{ fontWeight: 700, background: '#f9f9f9' }}>
-                        <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, padding: '8px' }}>TOTAL</td>
-                        <td className="amount-col" style={{ fontWeight: 800, padding: '8px', boxSizing: 'border-box' }}>
-                          <span style={{ float: 'left' }}>Rs.</span>
-                          <span style={{ float: 'right' }}>{formatCurrency(grandTotal)}</span>
-                          <div style={{ clear: 'both' }} />
+                        <td colSpan={5} style={{ textAlign: 'right', fontWeight: 700, padding: '8px 10px' }}>TOTAL</td>
+                        <td className="amount-col" style={{ fontWeight: 800, padding: '8px 10px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                            <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 700 }}>Rs.</span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>{formatCurrency(grandTotal)}</span>
+                          </div>
                         </td>
                       </tr>
                     )}

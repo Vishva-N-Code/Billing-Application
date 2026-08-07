@@ -158,21 +158,6 @@ export async function initSettings() {
         if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) await db.cashbills.bulkPut(cleanWithId(seedInvoices.cashbills));
         if (seedInvoices.dcs && seedInvoices.dcs.length > 0) await db.deliveryChellans.bulkPut(cleanWithId(seedInvoices.dcs));
         window.dispatchEvent(new CustomEvent('sync-complete'));
-      } else if (seedInvoices && seedInvoices.invoices) {
-        // Guarantee August 2026 bills are populated into local DB if not present yet
-        const hasAug = validInvoices.some(i => i.date && (i.date.startsWith('2026-08') || i.date.startsWith('2026-8')));
-        if (!hasAug) {
-          console.log('Seeding August 2026 bills into local Dexie DB...');
-          const stripId = (arr) => arr.map(({ id, ...rest }) => rest);
-          const augInvoices = seedInvoices.invoices.filter(i => i.date && i.date.startsWith('2026-08'));
-          const augCashbills = seedInvoices.cashbills ? seedInvoices.cashbills.filter(c => c.date && c.date.startsWith('2026-08')) : [];
-          const augDcs = seedInvoices.dcs ? seedInvoices.dcs.filter(d => d.date && d.date.startsWith('2026-08')) : [];
-
-          if (augInvoices.length > 0) await db.invoices.bulkAdd(stripId(augInvoices));
-          if (augCashbills.length > 0) await db.cashbills.bulkAdd(stripId(augCashbills));
-          if (augDcs.length > 0) await db.deliveryChellans.bulkAdd(stripId(augDcs));
-          window.dispatchEvent(new CustomEvent('sync-complete'));
-        }
       }
     } catch (seedErr) {
       console.error('Initial seed error:', seedErr);
@@ -408,11 +393,11 @@ export async function removeFromCloud(tableName, query) {
   }
 }
 
-async function fetchWithRetry(queryFn, maxRetries = 2, delayMs = 300) {
+async function fetchWithRetry(queryFn, maxRetries = 2, delayMs = 300, timeoutMs = 12000) {
   for (let i = 0; i < maxRetries; i++) {
     try {
       const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Fetch timeout')), 3000)
+        setTimeout(() => reject(new Error('Fetch timeout')), timeoutMs)
       );
       const res = await Promise.race([queryFn(), timeoutPromise]);
       if (res && !res.error) return res;
@@ -424,6 +409,13 @@ async function fetchWithRetry(queryFn, maxRetries = 2, delayMs = 300) {
   }
   return { data: null, error: new Error('Max retries exceeded') };
 }
+
+const normKey = (val) => {
+  if (val == null) return '';
+  const s = String(val).trim().toLowerCase();
+  if (/^\d+$/.test(s)) return String(parseInt(s, 10));
+  return s;
+};
 
 export async function syncFromCloud() {
   if (typeof window !== 'undefined' && !window.navigator.onLine) {
@@ -444,6 +436,10 @@ export async function syncFromCloud() {
 
     // Helper to determine if a local record needs to be updated with fresh details from cloud
     const shouldUpdateLocal = (localItem, cloudMetadata) => {
+      // If local item is missing full data payload, it MUST be fetched from cloud!
+      if (!localItem.data || typeof localItem.data !== 'object' || Object.keys(localItem.data).length === 0) {
+        return true;
+      }
       const fieldsToCompare = [
         'date', 'grandTotal', 'paymentStatus', 'paidAmount', 'clientCompany', 
         'docName', 'dcNo', 'invoiceNo', 'billNo', 'driverName', 'companyName', 'name'
@@ -453,7 +449,6 @@ export async function syncFromCloud() {
           const v1 = localItem[field];
           const v2 = cloudMetadata[field];
           if (v1 === v2) continue;
-          // Handle loose equivalences (e.g. number 15000 vs string "15000", or empty fields)
           if (Number(v1) === Number(v2) && v1 !== null && v2 !== null) continue;
           if ((v1 === '' || v1 === null || v1 === undefined) && (v2 === '' || v2 === null || v2 === undefined)) continue;
           return true;
@@ -484,14 +479,42 @@ export async function syncFromCloud() {
       }
       try {
         const localItems = await mapping.local.toArray();
-        const localMap = new Map(localItems.map(item => [item[mapping.key], item]));
+        
+        // Automatically purge duplicate local items matching the same key
+        const seenKeys = new Map();
+        const duplicateLocalIds = [];
+
+        for (const item of localItems) {
+          const k = normKey(item[mapping.key]);
+          if (!k) continue;
+          if (seenKeys.has(k)) {
+            const existing = seenKeys.get(k);
+            const existingScore = (existing.data && existing.data.items ? 10 : 0) + (existing.grandTotal ? 5 : 0) + (existing.id || 0);
+            const currentScore = (item.data && item.data.items ? 10 : 0) + (item.grandTotal ? 5 : 0) + (item.id || 0);
+            if (currentScore > existingScore) {
+              duplicateLocalIds.push(existing.id);
+              seenKeys.set(k, item);
+            } else {
+              duplicateLocalIds.push(item.id);
+            }
+          } else {
+            seenKeys.set(k, item);
+          }
+        }
+
+        if (duplicateLocalIds.length > 0) {
+          console.log(`Purging ${duplicateLocalIds.length} duplicate local items for ${mapping.remote}...`);
+          await mapping.local.bulkDelete(duplicateLocalIds);
+        }
+
+        const localMap = seenKeys;
 
         const idsToFetchFull = [];
         
         if (remoteMetadataList && remoteMetadataList.length > 0) {
           for (const remoteMeta of remoteMetadataList) {
             const cloudMeta = mapFromCloud(remoteMeta);
-            const keyValue = cloudMeta[mapping.key];
+            const keyValue = normKey(cloudMeta[mapping.key]);
             if (keyValue) {
               const exists = localMap.get(keyValue);
               if (!exists || shouldUpdateLocal(exists, cloudMeta)) {
@@ -503,11 +526,11 @@ export async function syncFromCloud() {
           }
         }
 
-        // Fetch full records in batches of 5 using Primary Key ID index (lightning fast, < 800ms) with retries
+        // Fetch full records in small batches of 2 (prevents Supabase 57014 statement timeouts)
         const fullRemoteRecords = [];
         if (idsToFetchFull.length > 0 && mapping.selectFields !== '*') {
-          console.log(`Fetching ${idsToFetchFull.length} full records for ${mapping.remote} by primary key...`);
-          const batchSize = 5;
+          console.log(`Fetching ${idsToFetchFull.length} full records for ${mapping.remote}...`);
+          const batchSize = 2;
           
           for (let i = 0; i < idsToFetchFull.length; i += batchSize) {
             const batchIds = idsToFetchFull.slice(i, i + batchSize);
@@ -526,7 +549,6 @@ export async function syncFromCloud() {
             }
           }
         } else if (mapping.selectFields === '*') {
-          // If selectFields was '*', we already retrieved the full records in the metadata fetch
           fullRemoteRecords.push(...(remoteMetadataList || []));
         }
 
@@ -536,11 +558,11 @@ export async function syncFromCloud() {
         
         for (const remoteItem of fullRemoteRecords) {
           const cloudItem = mapFromCloud(remoteItem);
-          const keyValue = cloudItem[mapping.key];
+          const keyValue = normKey(cloudItem[mapping.key]);
           if (keyValue) {
             const exists = localMap.get(keyValue);
             if (exists) {
-              itemsToPut.push({ ...cloudItem, id: exists.id });
+              itemsToPut.push({ ...exists, ...cloudItem, id: exists.id });
             } else {
               const { id, ...newItem } = cloudItem;
               itemsToAdd.push(newItem);
@@ -556,12 +578,15 @@ export async function syncFromCloud() {
         }
 
         // Push local changes to cloud if they don't exist there
-        const normKey = (val) => val == null ? '' : String(val).trim().toLowerCase();
         const remoteKeys = new Set(remoteMetadataList ? remoteMetadataList.map(d => normKey(mapFromCloud(d)[mapping.key])) : []);
         const pushPromises = [];
         for (const localItem of localItems) {
           const localKey = localItem[mapping.key];
-          if (localKey && !remoteKeys.has(normKey(localKey))) {
+          const isValidDoc = (localItem.clientCompany && localItem.clientCompany.trim() !== '') || 
+                             (localItem.companyName && localItem.companyName.trim() !== '') ||
+                             (localItem.name && localItem.name.trim() !== '') ||
+                             (localItem.driverName && localItem.driverName.trim() !== '');
+          if (localKey && !remoteKeys.has(normKey(localKey)) && isValidDoc) {
             pushPromises.push(pushToCloud(mapping.remote, localItem));
           }
         }

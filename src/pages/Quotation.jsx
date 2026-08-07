@@ -62,7 +62,12 @@ export default function Quotation({ exportItem }) {
 
   const fetchSaved = async () => {
     const data = await db.quotations.toArray();
-    setSavedQuotations(data.reverse());
+    const validData = data.filter(q => {
+      const docName = q.docName || q.data?.form?.docName || '';
+      const client = q.clientCompany || q.toCompany || q.data?.form?.toCompany || q.data?.form?.billingCompany || '';
+      return docName.trim() !== '' || client.trim() !== '';
+    });
+    setSavedQuotations(validData.reverse());
   };
 
   useEffect(() => {
@@ -88,6 +93,14 @@ export default function Quotation({ exportItem }) {
       setForm(f => ({ ...f, termsAndConditions: '' }));
     };
     init();
+
+    const handleSyncComplete = () => {
+      fetchSaved();
+    };
+    window.addEventListener('sync-complete', handleSyncComplete);
+    return () => {
+      window.removeEventListener('sync-complete', handleSyncComplete);
+    };
   }, [location.state, exportItem]);
 
   const loadQuotation = (q) => {
@@ -354,8 +367,8 @@ export default function Quotation({ exportItem }) {
                                 <th style={{ width: '45px', textAlign: 'center' }}>S.No</th>
                                 <th>Description</th>
                                 <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
-                                <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
-                                <th style={{ width: '130px', textAlign: 'right' }}>Amount</th>
+                                <th style={{ width: '135px', textAlign: 'right', whiteSpace: 'nowrap' }}>Rate</th>
+                                <th style={{ width: '135px', textAlign: 'right', whiteSpace: 'nowrap' }}>Amount</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -366,22 +379,20 @@ export default function Quotation({ exportItem }) {
                                     <td style={{ textAlign: 'center' }}>{pageIndex * itemsPerPage + i + 1}</td>
                                     <td>{item.description || '—'}</td>
                                     <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
-                                    <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
+                                    <td className="amount-col" style={{ padding: '8px 10px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>
                                       {item.rate ? (
-                                        <>
-                                          <span style={{ float: 'left' }}>Rs.</span>
-                                          <span style={{ float: 'right' }}>{formatCurrency(item.rate)}</span>
-                                          <div style={{ clear: 'both' }} />
-                                        </>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                          <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 500 }}>Rs.</span>
+                                          <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{formatCurrency(item.rate)}</span>
+                                        </div>
                                       ) : '—'}
                                     </td>
-                                    <td className="amount-col" style={{ padding: '8px', boxSizing: 'border-box' }}>
+                                    <td className="amount-col" style={{ padding: '8px 10px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>
                                       {amount ? (
-                                        <>
-                                          <span style={{ float: 'left' }}>Rs.</span>
-                                          <span style={{ float: 'right' }}>{formatCurrency(amount)}</span>
-                                          <div style={{ clear: 'both' }} />
-                                        </>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                          <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 500 }}>Rs.</span>
+                                          <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 500 }}>{formatCurrency(amount)}</span>
+                                        </div>
                                       ) : '—'}
                                     </td>
                                   </tr>
