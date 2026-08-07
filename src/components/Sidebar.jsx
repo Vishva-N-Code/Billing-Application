@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { FileText, Receipt, ClipboardList, Users, Banknote, Menu, X, Truck, Database, Car, Settings, LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, Award, ShoppingCart } from 'lucide-react';
+import { FileText, Receipt, ClipboardList, Users, Banknote, Menu, X, Truck, Database, Car, Settings, LayoutDashboard, BarChart3, ChevronLeft, ChevronRight, Award } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { syncFromCloud } from '../db';
 
@@ -35,7 +35,6 @@ export default function Sidebar() {
     { to: '/vehicle-details', icon: <Car size={20} />, label: 'Vehicle Details' },
     { to: '/reports', icon: <BarChart3 size={20} />, label: 'Financial Reports' },
     { to: '/experience-certificate', icon: <Award size={20} />, label: 'Experience Certificate' },
-    { to: '/purchase-bill', icon: <ShoppingCart size={20} />, label: 'Purchase Bill' },
     { to: '/settings', icon: <Settings size={20} />, label: 'Settings' },
   ];
 

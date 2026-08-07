@@ -17,17 +17,22 @@ vi.mock('dexie', () => {
         count: vi.fn(),
         add: vi.fn(),
       };
-      this.invoices = {};
+      this.invoices = {
+        toArray: vi.fn().mockResolvedValue([]),
+        add: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        get: vi.fn()
+      };
       this.cashbills = {};
       this.deliveryChellans = {};
       this.quotations = {};
       this.proformaInvoices = {};
       this.mediaLibrary = {};
       this.experienceCertificates = {};
-      this.purchaseBills = {};
     }
-    version() { return this; }
-    stores() { return this; }
+    version() { return { stores: () => ({ upgrade: () => {} }) }; }
+    stores() { return { upgrade: () => {} }; }
   }
 
   return {
@@ -90,6 +95,18 @@ describe('Database and Sync Operations', () => {
       db.settings.get.mockResolvedValue(undefined);
       const num = await getNextInvoiceNumber();
       expect(num).toBe('046');
+    });
+
+    it('getNextInvoiceNumber should return 1 higher than maximum invoice number stored in db.invoices', async () => {
+      db.settings.get.mockResolvedValue({ value: 46 });
+      db.invoices.toArray.mockResolvedValue([
+        { invoiceNo: '046' },
+        { invoiceNo: '052' },
+        { invoiceNo: '048' }
+      ]);
+      const num = await getNextInvoiceNumber();
+      expect(num).toBe('053');
+      expect(db.settings.put).toHaveBeenCalledWith({ key: 'invoiceCounter', value: 53 });
     });
 
     it('updateInvoiceCounter should write incremented integer back to settings', async () => {

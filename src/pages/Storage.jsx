@@ -34,8 +34,7 @@ export default function Storage() {
     const isClean = (doc) => {
       const isClientEmpty = !doc.clientCompany || doc.clientCompany.trim() === '';
       const isZeroTotal = doc.grandTotal === 0 || doc.grandTotal == null;
-      const isDraftName = doc.docName && (doc.docName.toLowerCase().includes('draft') || doc.docName.toLowerCase().includes('test'));
-      return !(isClientEmpty && isZeroTotal) && !isDraftName;
+      return !(isClientEmpty && isZeroTotal);
     };
     setInvoices((await db.invoices.toArray()).filter(isClean).reverse());
     setQuotations((await db.quotations.toArray()).filter(isClean).reverse());
@@ -74,27 +73,35 @@ export default function Storage() {
     };
   }, []);
 
+  const parseDocDate = (dateStr) => {
+    if (!dateStr) return new Date();
+    if (typeof dateStr === 'string' && dateStr.includes('/')) {
+      const parts = dateStr.split('/');
+      if (parts.length === 3) {
+        return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10));
+      }
+    }
+    const d = new Date(dateStr);
+    return isNaN(d.getTime()) ? new Date() : d;
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
+    const d = parseDocDate(dateStr);
     return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
   const getMonthYear = (dateStr) => {
     if (!dateStr) return 'Unknown Month';
-    const d = new Date(dateStr);
+    const d = parseDocDate(dateStr);
     return d.toLocaleString('default', { month: 'long', year: 'numeric' });
   };
 
   const groupAndSortDocs = (docs) => {
-    // 1. Sort by date first to get month order
-    // 2. We want to group by month-year
-    // 3. Within each group, sort by bill number ascending
-
     const groups = {};
     docs.forEach(doc => {
-      const date = new Date(doc.date);
-      const monthYear = getMonthYear(doc.date);
+      const date = parseDocDate(doc.date);
+      const monthYear = date.toLocaleString('default', { month: 'long', year: 'numeric' });
       const monthSortKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
       
       if (!groups[monthSortKey]) {
@@ -103,16 +110,16 @@ export default function Storage() {
       groups[monthSortKey].items.push(doc);
     });
 
-    // Sort months ascending (Oldest first)
-    const sortedMonthKeys = Object.keys(groups).sort();
+    // Sort months DESCENDING (Newest month e.g. August 2026 at the VERY TOP)
+    const sortedMonthKeys = Object.keys(groups).sort().reverse();
     
     return sortedMonthKeys.map(key => {
       const group = groups[key];
-      // Sort items within month by bill number (low to high)
+      // Sort items within month by bill/invoice number descending (newest first)
       group.items.sort((a, b) => {
         const numA = parseInt(a.invoiceNo || a.billNo || a.dcNo || a.id, 10) || 0;
         const numB = parseInt(b.invoiceNo || b.billNo || b.dcNo || b.id, 10) || 0;
-        return numA - numB;
+        return numB - numA;
       });
       return group;
     });

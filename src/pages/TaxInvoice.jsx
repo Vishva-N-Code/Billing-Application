@@ -32,6 +32,8 @@ export default function TaxInvoice({ exportItem }) {
     vendorCode: '',
     gstType: 'cgst_sgst', // 'cgst_sgst' or 'igst'
     termsAndConditions: '',
+    showQty: false,
+    showRate: false,
   });
 
   const [items, setItems] = useState([
@@ -121,10 +123,26 @@ export default function TaxInvoice({ exportItem }) {
       setForm(f => ({ ...f, termsAndConditions: '' }));
     };
     init();
+
+    const handleSyncComplete = async () => {
+      await fetchSaved();
+      const itemToLoad = exportItem || location.state?.loadItem;
+      if (!itemToLoad) {
+        const num = await getNextInvoiceNumber();
+        setForm(f => {
+          if (!f.id && (!f.billingCompany || f.billingCompany.trim() === '')) {
+            return { ...f, invoiceNo: num };
+          }
+          return f;
+        });
+      }
+    };
+    window.addEventListener('sync-complete', handleSyncComplete);
+    return () => window.removeEventListener('sync-complete', handleSyncComplete);
   }, [location.state, exportItem]);
 
   const loadInvoice = (inv) => {
-    setForm({ ...inv.data.form, id: inv.id });
+    setForm({ showQty: false, showRate: false, ...inv.data.form, id: inv.id });
     setItems(inv.data.items);
     if (inv.data.signature) setSignature(inv.data.signature);
     setActiveTab('preview');
@@ -451,7 +469,20 @@ export default function TaxInvoice({ exportItem }) {
             </div>
 
             <div className="card" style={{ marginBottom: '16px' }}>
-              <div className="card-title">Invoice Items</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
+                <div className="card-title" style={{ margin: 0 }}>Invoice Items</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', background: 'var(--bg-input)', padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Display in Preview:</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)', fontWeight: 500 }}>
+                    <input type="checkbox" checked={!!form.showQty} onChange={e => setForm({ ...form, showQty: e.target.checked })} style={{ accentColor: 'var(--accent-gold)' }} />
+                    Qty Column
+                  </label>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)', fontWeight: 500 }}>
+                    <input type="checkbox" checked={!!form.showRate} onChange={e => setForm({ ...form, showRate: e.target.checked })} style={{ accentColor: 'var(--accent-gold)' }} />
+                    Rate Column
+                  </label>
+                </div>
+              </div>
               <div className="table-wrapper" style={{ marginBottom: '12px' }}>
                 <table className="table">
                   <thead>
@@ -539,6 +570,17 @@ export default function TaxInvoice({ exportItem }) {
 
           {/* === PREVIEW === */}
           <div className="doc-preview-panel" style={{ display: activeTab === 'preview' ? 'block' : 'none' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '14px', marginBottom: '10px', background: 'var(--bg-card)', padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Preview Columns:</span>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)', fontWeight: 500 }}>
+                <input type="checkbox" checked={!!form.showQty} onChange={e => setForm({ ...form, showQty: e.target.checked })} style={{ accentColor: 'var(--accent-gold)' }} />
+                Qty Column
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)', fontWeight: 500 }}>
+                <input type="checkbox" checked={!!form.showRate} onChange={e => setForm({ ...form, showRate: e.target.checked })} style={{ accentColor: 'var(--accent-gold)' }} />
+                Rate Column
+              </label>
+            </div>
             <div className="doc-preview-container">
               <div ref={previewRef} className="print-capture-wrap">
                 <div className="doc-preview">
@@ -594,83 +636,121 @@ export default function TaxInvoice({ exportItem }) {
                     </div>
 
                     {/* Items Table */}
-                    <table className="doc-table" style={{ fontSize: '0.92rem', tableLayout: 'fixed', width: '100%' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ width: '50px', fontSize: '0.88rem' }}>S.NO</th>
-                          <th style={{ fontSize: '0.88rem' }}>DESCRIPTION</th>
-                          <th style={{ textAlign: 'right', fontSize: '0.88rem', width: '160px' }}>AMOUNT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, i) => (
-                          <tr key={i}>
-                            <td>{i + 1}</td>
-                            <td>
-                              {item.description || '—'}
-                              {item.quantity && item.unitType ? (
-                                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
-                                  {item.unitType === 'hours' ? `Hours - ${item.quantity} hours` : `${item.quantity} shift(s)`}
-                                  {item.rate && ` @ Rs. ${formatCurrency(item.rate)}`}
-                                </div>
-                              ) : null}
-                            </td>
-                            <td className="amount-col" style={{ boxSizing: 'border-box' }}>
-                              <span style={{ float: 'left' }}>Rs.</span>
-                              <span style={{ float: 'right' }}>{formatCurrency(calcAmount(item))}</span>
-                              <div style={{ clear: 'both' }} />
-                            </td>
-                          </tr>
-                        ))}
+                    {(() => {
+                      const showQty = !!form.showQty;
+                      const showRate = !!form.showRate;
+                      // Base columns before total: S.NO (1) + DESCRIPTION (1) + (showQty ? 1 : 0) + (showRate ? 1 : 0) = labelColSpan
+                      const labelColSpan = 2 + (showQty ? 1 : 0) + (showRate ? 1 : 0);
 
-                        {/* Totals integrated into the main doc-table using colSpan */}
-                        <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
-                          <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>SUBTOTAL</td>
-                          <td className="amount-col" style={{ boxSizing: 'border-box' }}>
-                            <span style={{ float: 'left' }}>Rs.</span>
-                            <span style={{ float: 'right' }}>{formatCurrency(subtotal)}</span>
-                            <div style={{ clear: 'both' }} />
-                          </td>
-                        </tr>
-                        {form.gstType === 'cgst_sgst' ? (
-                          <>
+                      const formatQty = (item) => {
+                        if (!item.quantity) return '—';
+                        const unitStr = item.unitType === 'hours' ? 'Hrs' : item.unitType === 'shifts' ? 'Shift(s)' : item.unitType || '';
+                        return `${item.quantity} ${unitStr}`.trim();
+                      };
+
+                      return (
+                        <table className="doc-table" style={{ fontSize: '0.92rem', tableLayout: 'fixed', width: '100%' }}>
+                          <thead>
+                            <tr>
+                              <th style={{ width: '45px', fontSize: '0.88rem', textAlign: 'center' }}>S.NO</th>
+                              <th style={{ fontSize: '0.88rem', textAlign: 'left' }}>DESCRIPTION</th>
+                              {showQty && <th style={{ textAlign: 'center', fontSize: '0.88rem', width: '100px' }}>QTY</th>}
+                              {showRate && <th style={{ textAlign: 'right', fontSize: '0.88rem', width: '130px' }}>RATE</th>}
+                              <th style={{ textAlign: 'right', fontSize: '0.88rem', width: '140px' }}>AMOUNT</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((item, i) => (
+                              <tr key={i}>
+                                <td style={{ textAlign: 'center' }}>{i + 1}</td>
+                                <td style={{ textAlign: 'left' }}>
+                                  {item.description || '—'}
+                                  {!showQty && !showRate && item.quantity && item.unitType ? (
+                                    <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '2px' }}>
+                                      {item.unitType === 'hours' ? `Hours - ${item.quantity} hours` : `${item.quantity} shift(s)`}
+                                      {item.rate && ` @ Rs. ${formatCurrency(item.rate)}`}
+                                    </div>
+                                  ) : null}
+                                </td>
+                                {showQty && (
+                                  <td style={{ textAlign: 'center', fontSize: '0.88rem', whiteSpace: 'nowrap' }}>
+                                    {formatQty(item)}
+                                  </td>
+                                )}
+                                {showRate && (
+                                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                    {item.rate ? (
+                                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                        <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 400 }}>Rs.</span>
+                                        <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 400 }}>{formatCurrency(item.rate)}</span>
+                                      </div>
+                                    ) : '—'}
+                                  </td>
+                                )}
+                                <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                    <span style={{ fontSize: '0.85rem', color: '#555', fontWeight: 400 }}>Rs.</span>
+                                    <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 400 }}>{formatCurrency(calcAmount(item))}</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+
+                            {/* Totals integrated into the main doc-table using colSpan */}
                             <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
-                              <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>CGST 09%</td>
-                              <td className="amount-col" style={{ boxSizing: 'border-box' }}>
-                                <span style={{ float: 'left' }}>Rs.</span>
-                                <span style={{ float: 'right' }}>{formatCurrency(cgst)}</span>
-                                <div style={{ clear: 'both' }} />
+                              <td colSpan={labelColSpan} style={{ textAlign: 'right', paddingRight: '16px' }}>SUBTOTAL</td>
+                              <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                  <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 600 }}>Rs.</span>
+                                  <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{formatCurrency(subtotal)}</span>
+                                </div>
                               </td>
                             </tr>
-                            <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
-                              <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>SGST 09%</td>
-                              <td className="amount-col" style={{ boxSizing: 'border-box' }}>
-                                <span style={{ float: 'left' }}>Rs.</span>
-                                <span style={{ float: 'right' }}>{formatCurrency(sgst)}</span>
-                                <div style={{ clear: 'both' }} />
+                            {form.gstType === 'cgst_sgst' ? (
+                              <>
+                                <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
+                                  <td colSpan={labelColSpan} style={{ textAlign: 'right', paddingRight: '16px' }}>CGST 09%</td>
+                                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                      <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 600 }}>Rs.</span>
+                                      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{formatCurrency(cgst)}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                                <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
+                                  <td colSpan={labelColSpan} style={{ textAlign: 'right', paddingRight: '16px' }}>SGST 09%</td>
+                                  <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                      <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 600 }}>Rs.</span>
+                                      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{formatCurrency(sgst)}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              </>
+                            ) : (
+                              <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
+                                <td colSpan={labelColSpan} style={{ textAlign: 'right', paddingRight: '16px' }}>IGST 18%</td>
+                                <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                    <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 600 }}>Rs.</span>
+                                    <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 700 }}>{formatCurrency(igst)}</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                            <tr style={{ fontWeight: 800, background: '#f0f0f0' }}>
+                              <td colSpan={labelColSpan} style={{ textAlign: 'right', paddingRight: '16px', fontSize: '1rem' }}>GRAND TOTAL</td>
+                              <td style={{ padding: '8px 10px', whiteSpace: 'nowrap' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                  <span style={{ fontSize: '0.95rem', color: '#111', fontWeight: 800 }}>Rs.</span>
+                                  <span style={{ fontSize: '0.95rem', fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>{formatCurrency(grandTotal)}</span>
+                                </div>
                               </td>
                             </tr>
-                          </>
-                        ) : (
-                          <tr style={{ fontWeight: 600, background: '#f9f9f9' }}>
-                            <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px' }}>IGST 18%</td>
-                            <td className="amount-col" style={{ boxSizing: 'border-box' }}>
-                              <span style={{ float: 'left' }}>Rs.</span>
-                              <span style={{ float: 'right' }}>{formatCurrency(igst)}</span>
-                              <div style={{ clear: 'both' }} />
-                            </td>
-                          </tr>
-                        )}
-                        <tr style={{ fontWeight: 800, background: '#f0f0f0' }}>
-                          <td colSpan={2} style={{ textAlign: 'right', paddingRight: '16px', fontSize: '1rem' }}>GRAND TOTAL</td>
-                          <td className="amount-col" style={{ boxSizing: 'border-box' }}>
-                            <span style={{ float: 'left', fontSize: '1rem' }}>Rs.</span>
-                            <span style={{ float: 'right', fontSize: '1rem' }}>{formatCurrency(grandTotal)}</span>
-                            <div style={{ clear: 'both' }} />
-                          </td>
-                        </tr>
-                      </tbody>
-                    </table>
+                          </tbody>
+                        </table>
+                      );
+                    })()}
 
                     {/* Payment & Signature */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', border: '1px solid #ccc', borderRadius: '4px', padding: '10px', marginTop: '10px', fontSize: '0.85rem' }}>

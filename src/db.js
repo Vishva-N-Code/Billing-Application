@@ -158,6 +158,21 @@ export async function initSettings() {
         if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) await db.cashbills.bulkPut(cleanWithId(seedInvoices.cashbills));
         if (seedInvoices.dcs && seedInvoices.dcs.length > 0) await db.deliveryChellans.bulkPut(cleanWithId(seedInvoices.dcs));
         window.dispatchEvent(new CustomEvent('sync-complete'));
+      } else if (seedInvoices && seedInvoices.invoices) {
+        // Guarantee August 2026 bills are populated into local DB if not present yet
+        const hasAug = validInvoices.some(i => i.date && (i.date.startsWith('2026-08') || i.date.startsWith('2026-8')));
+        if (!hasAug) {
+          console.log('Seeding August 2026 bills into local Dexie DB...');
+          const stripId = (arr) => arr.map(({ id, ...rest }) => rest);
+          const augInvoices = seedInvoices.invoices.filter(i => i.date && i.date.startsWith('2026-08'));
+          const augCashbills = seedInvoices.cashbills ? seedInvoices.cashbills.filter(c => c.date && c.date.startsWith('2026-08')) : [];
+          const augDcs = seedInvoices.dcs ? seedInvoices.dcs.filter(d => d.date && d.date.startsWith('2026-08')) : [];
+
+          if (augInvoices.length > 0) await db.invoices.bulkAdd(stripId(augInvoices));
+          if (augCashbills.length > 0) await db.cashbills.bulkAdd(stripId(augCashbills));
+          if (augDcs.length > 0) await db.deliveryChellans.bulkAdd(stripId(augDcs));
+          window.dispatchEvent(new CustomEvent('sync-complete'));
+        }
       }
     } catch (seedErr) {
       console.error('Initial seed error:', seedErr);
@@ -208,8 +223,7 @@ export async function initSettings() {
       const emptyIds = items.filter(item => {
         const isClientEmpty = !item.clientCompany || item.clientCompany.trim() === '';
         const isZeroTotal = item.grandTotal === 0 || item.grandTotal == null;
-        const isTest = item.docName && (item.docName.toLowerCase().includes('draft') || item.docName.toLowerCase().includes('test'));
-        return (isClientEmpty && isZeroTotal) || isTest;
+        return isClientEmpty && isZeroTotal;
       }).map(item => item.id);
       if (emptyIds.length > 0) {
         await table.bulkDelete(emptyIds);
@@ -225,14 +239,61 @@ export async function initSettings() {
   }
 }
 
+export function extractInvoiceNumber(str) {
+  if (typeof str === 'number') return str;
+  if (!str || typeof str !== 'string') return 0;
+  const matches = str.match(/\d+/g);
+  if (!matches || matches.length === 0) return 0;
+  const lastMatch = matches[matches.length - 1];
+  const parsed = parseInt(lastMatch, 10);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 export async function getNextInvoiceNumber() {
-  const counter = await db.settings.get('invoiceCounter');
-  return String(counter ? counter.value : 46).padStart(3, '0');
+  let maxInDb = 0;
+  let maxPadLength = 3;
+  try {
+    const allInvoices = await db.invoices.toArray();
+    if (Array.isArray(allInvoices)) {
+      for (const inv of allInvoices) {
+        const rawNo = inv.invoiceNo || inv.data?.form?.invoiceNo;
+        if (rawNo) {
+          const num = extractInvoiceNumber(rawNo);
+          if (num > maxInDb) {
+            maxInDb = num;
+          }
+          if (typeof rawNo === 'string' && /^\d+$/.test(rawNo.trim())) {
+            maxPadLength = Math.max(maxPadLength, rawNo.trim().length);
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error reading db.invoices in getNextInvoiceNumber:', err);
+  }
+
+  const counterSetting = await db.settings.get('invoiceCounter');
+  const counterVal = counterSetting ? Number(counterSetting.value) : 46;
+
+  const nextNum = Math.max(maxInDb + 1, counterVal);
+
+  try {
+    await db.settings.put({ key: 'invoiceCounter', value: nextNum });
+  } catch (err) {
+    console.warn('Failed to update invoiceCounter setting:', err);
+  }
+
+  return String(nextNum).padStart(maxPadLength, '0');
 }
 
 export async function updateInvoiceCounter(newNumberStr) {
-  const num = parseInt(newNumberStr, 10);
-  if (!isNaN(num)) await db.settings.put({ key: 'invoiceCounter', value: num + 1 });
+  const num = extractInvoiceNumber(newNumberStr);
+  if (num > 0) {
+    const counterSetting = await db.settings.get('invoiceCounter');
+    const currentVal = counterSetting ? Number(counterSetting.value) || 0 : 0;
+    const targetVal = Math.max(num + 1, currentVal);
+    await db.settings.put({ key: 'invoiceCounter', value: targetVal });
+  }
 }
 
 export const COLUMN_MAP = {
@@ -347,12 +408,15 @@ export async function removeFromCloud(tableName, query) {
   }
 }
 
-async function fetchWithRetry(queryFn, maxRetries = 3, delayMs = 1500) {
+async function fetchWithRetry(queryFn, maxRetries = 2, delayMs = 300) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await queryFn();
-      if (!res.error) return res;
-      if (i === maxRetries - 1) return res;
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Fetch timeout')), 3000)
+      );
+      const res = await Promise.race([queryFn(), timeoutPromise]);
+      if (res && !res.error) return res;
+      if (i === maxRetries - 1) return res || { data: null, error: new Error('Empty response') };
     } catch (err) {
       if (i === maxRetries - 1) return { data: null, error: err };
     }
@@ -376,7 +440,6 @@ export async function syncFromCloud() {
       { local: db.proformaInvoices, remote: 'proforma_invoices', key: 'invoiceNo', selectFields: 'id, invoice_no, doc_name, date, client_company, grand_total' },
       { local: db.mediaLibrary, remote: 'media_library', key: 'name', selectFields: '*' },
       { local: db.experienceCertificates, remote: 'experience_certificates', key: 'docName', selectFields: 'id, doc_name, driver_name, date' },
-      { local: db.purchaseBills, remote: 'purchase_bills', key: 'name', selectFields: '*' },
     ];
 
     // Helper to determine if a local record needs to be updated with fresh details from cloud
@@ -533,8 +596,23 @@ export async function deleteCustomer(id) {
   return await db.customers.delete(numericId); 
 }
 
-export async function saveInvoice(data) { const id = await db.invoices.add(data); pushToCloud('invoices', data); return id; }
-export async function updateInvoice(id, data) { const numericId = Number(id); await db.invoices.update(numericId, data); pushToCloud('invoices', data); }
+export async function saveInvoice(data) {
+  const id = await db.invoices.add(data);
+  if (data && data.invoiceNo) {
+    await updateInvoiceCounter(data.invoiceNo);
+  }
+  pushToCloud('invoices', data);
+  return id;
+}
+
+export async function updateInvoice(id, data) {
+  const numericId = Number(id);
+  await db.invoices.update(numericId, data);
+  if (data && data.invoiceNo) {
+    await updateInvoiceCounter(data.invoiceNo);
+  }
+  pushToCloud('invoices', data);
+}
 export async function deleteInvoice(id) {
   const numericId = Number(id);
   const item = await db.invoices.get(numericId);
@@ -600,15 +678,6 @@ export async function deleteMediaItem(id) {
   const item = await db.mediaLibrary.get(numericId);
   if (item) removeFromCloud('media_library', { name: item.name });
   return await db.mediaLibrary.delete(numericId);
-}
-
-export async function getAllPurchaseBills() { return (await db.purchaseBills.toArray()).sort((a,b) => new Date(b.date) - new Date(a.date)); }
-export async function savePurchaseBill(data) { const id = await db.purchaseBills.add(data); pushToCloud('purchase_bills', data); return id; }
-export async function deletePurchaseBill(id) {
-  const numericId = Number(id);
-  const item = await db.purchaseBills.get(numericId);
-  if (item) removeFromCloud('purchase_bills', { name: item.name, date: item.date });
-  return await db.purchaseBills.delete(numericId);
 }
 
 export async function getAllVehicleSections() { return (await db.vehicleDetails.toArray()).sort((a,b) => (a.order||0) - (b.order||0)); }

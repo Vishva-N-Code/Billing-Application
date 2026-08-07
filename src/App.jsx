@@ -15,7 +15,6 @@ import Settings from './pages/Settings';
 import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
 import ExperienceCertificate from './pages/ExperienceCertificate';
-import PurchaseBill from './pages/PurchaseBill';
 import UpdatePrompt from './components/UpdatePrompt';
 import { syncFromCloud, initSettings } from './db';
 import './index.css';
@@ -74,11 +73,14 @@ function App() {
 
   useEffect(() => {
     async function initSync() {
+      // 1. Load settings & local DB immediately
       await initSettings();
-      // Dispatch sync-complete after init so pages re-fetch seeded data
-      setTimeout(() => window.dispatchEvent(new CustomEvent('sync-complete')), 100);
-      // Try cloud sync — gracefully ignore if Supabase is offline/paused
-      try { await syncFromCloud(); } catch (e) { console.warn('Cloud sync skipped:', e.message); }
+      // 2. Dispatch sync-complete right away so all pages load local data in ~10ms
+      window.dispatchEvent(new CustomEvent('sync-complete'));
+      // 3. Trigger cloud sync asynchronously in background without blocking initial app load
+      setTimeout(() => {
+        syncFromCloud().catch(e => console.warn('Background cloud sync skipped:', e.message));
+      }, 50);
     }
     initSync();
   }, []);
@@ -105,7 +107,6 @@ function App() {
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="/experience-certificate" element={<ExperienceCertificate />} />
-              <Route path="/purchase-bill" element={<PurchaseBill />} />
             </Routes>
           </main>
           </BrowserRouter>

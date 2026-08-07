@@ -269,6 +269,33 @@
       "grandTotal": 118000,
       "paymentStatus": "unpaid",
       "paidAmount": 0
+    },
+    {
+      "invoiceNo": "104",
+      "docName": "Tax Invoice 104",
+      "date": "2026-08-01",
+      "clientCompany": "TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED",
+      "grandTotal": 48380,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "105",
+      "docName": "Tax Invoice 105",
+      "date": "2026-08-04",
+      "clientCompany": "ECI DISPLAY INDIA PVT LTD",
+      "grandTotal": 18880,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
+    },
+    {
+      "invoiceNo": "106",
+      "docName": "Tax Invoice 106",
+      "date": "2026-08-07",
+      "clientCompany": "NVH INDIA AUTO PARTS LIMITED",
+      "grandTotal": 35400,
+      "paymentStatus": "unpaid",
+      "paidAmount": 0
     }
   ],
   "cashbills": [
@@ -352,6 +379,24 @@
       "grandTotal": 94250,
       "paymentStatus": "paid",
       "paidAmount": 94250
+    },
+    {
+      "billNo": "011",
+      "docName": "Cash Bill 011",
+      "date": "2026-08-02",
+      "clientCompany": "SHEKINA METAL WORKS",
+      "grandTotal": 12500,
+      "paymentStatus": "paid",
+      "paidAmount": 12500
+    },
+    {
+      "billNo": "012",
+      "docName": "Cash Bill 012",
+      "date": "2026-08-06",
+      "clientCompany": "Capricorn Logistics Pvt Ltd",
+      "grandTotal": 8500,
+      "paymentStatus": "paid",
+      "paidAmount": 8500
     }
   ],
   "dcs": [
@@ -486,6 +531,18 @@
       "docName": "AMT - DC - 059",
       "date": "2026-07-21",
       "clientCompany": "AMERICAN TEC ELECTRONIC INDIA PVT LTD"
+    },
+    {
+      "dcNo": "OSC0061",
+      "docName": "TOPRUN - DC - 061",
+      "date": "2026-08-01",
+      "clientCompany": "TOPRUN AUTOMOTIVE INDIA PRIVATE LIMITED"
+    },
+    {
+      "dcNo": "OSC0062",
+      "docName": "NVH - DC - 062",
+      "date": "2026-08-05",
+      "clientCompany": "NVH INDIA AUTO PARTS LIMITED"
     }
   ]
 }
