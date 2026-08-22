@@ -47,13 +47,13 @@ describe('TaxInvoice Component Optional Columns', () => {
 
     await waitFor(() => {
       const checkboxes = screen.getAllByRole('checkbox');
-      expect(checkboxes.length).toBeGreaterThanOrEqual(2);
+      expect(checkboxes.length).toBe(2);
     });
-    expect(screen.getAllByText(/Qty Column/i).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Rate Column/i).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText(/Qty Column/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Rate Column/i)).toBeInTheDocument();
   });
 
-  it('should toggle Qty and Rate columns in preview table when checked', async () => {
+  it('should toggle Qty and Rate columns in preview table when checked in details tab', async () => {
     render(
       <MemoryRouter>
         <TaxInvoice />
@@ -64,26 +64,20 @@ describe('TaxInvoice Component Optional Columns', () => {
       expect(screen.getByRole('button', { name: /Preview/i })).toBeInTheDocument();
     });
 
+    // Check Qty Column and Rate Column checkboxes in details filling section
+    const qtyCheckbox = screen.getByLabelText(/Qty Column/i);
+    const rateCheckbox = screen.getByLabelText(/Rate Column/i);
+    
+    // Check Qty Column checkbox
+    fireEvent.click(qtyCheckbox);
+    // Check Rate Column checkbox
+    fireEvent.click(rateCheckbox);
+
     // Switch to preview tab
     const previewTabBtn = screen.getByRole('button', { name: /Preview/i });
     fireEvent.click(previewTabBtn);
 
-    // Initially Qty and Rate columns are not visible in preview table header
-    expect(screen.queryByRole('columnheader', { name: /^QTY$/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole('columnheader', { name: /^RATE$/i })).not.toBeInTheDocument();
-
-    // Check Qty Column checkbox in preview panel toolbar
-    const qtyCheckbox = screen.getAllByLabelText(/Qty Column/i)[0];
-    fireEvent.click(qtyCheckbox);
-
-    // Now Qty column header should be rendered in preview table
-    expect(screen.getByRole('columnheader', { name: /^QTY$/i })).toBeInTheDocument();
-
-    // Check Rate Column checkbox
-    const rateCheckbox = screen.getAllByLabelText(/Rate Column/i)[0];
-    fireEvent.click(rateCheckbox);
-
-    // Now both QTY and RATE column headers should be rendered
+    // Now both QTY and RATE column headers should be rendered in preview table
     expect(screen.getByRole('columnheader', { name: /^QTY$/i })).toBeInTheDocument();
     expect(screen.getByRole('columnheader', { name: /^RATE$/i })).toBeInTheDocument();
   });

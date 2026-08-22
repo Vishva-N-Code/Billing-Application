@@ -570,17 +570,6 @@ export default function TaxInvoice({ exportItem }) {
 
           {/* === PREVIEW === */}
           <div className="doc-preview-panel" style={{ display: activeTab === 'preview' ? 'block' : 'none' }}>
-            <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '14px', marginBottom: '10px', background: 'var(--bg-card)', padding: '8px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
-              <span style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Preview Columns:</span>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)', fontWeight: 500 }}>
-                <input type="checkbox" checked={!!form.showQty} onChange={e => setForm({ ...form, showQty: e.target.checked })} style={{ accentColor: 'var(--accent-gold)' }} />
-                Qty Column
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.82rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)', fontWeight: 500 }}>
-                <input type="checkbox" checked={!!form.showRate} onChange={e => setForm({ ...form, showRate: e.target.checked })} style={{ accentColor: 'var(--accent-gold)' }} />
-                Rate Column
-              </label>
-            </div>
             <div className="doc-preview-container">
               <div ref={previewRef} className="print-capture-wrap">
                 <div className="doc-preview">

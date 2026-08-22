@@ -145,19 +145,52 @@ const DEFAULT_VEHICLE_SECTIONS = [
 
 import seedInvoices from './data/seedInvoices.json';
 
+export function notifyLocalChange() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('sync-complete'));
+  }
+}
+
 export async function initSettings() {
   try {
-    // 1. Immediate Seed Check: Ensures documents display instantly on any new device/browser
+    // 1. Immediate Seed Check & Fast Sync: Ensures documents display instantly on any device/browser
     try {
       const allInvoices = await db.invoices.toArray();
-      const validInvoices = allInvoices.filter(i => i.clientCompany && i.clientCompany.trim() !== '');
-      if (validInvoices.length === 0 && seedInvoices && seedInvoices.invoices) {
-        console.log(`Seeding ${seedInvoices.invoices.length} documents into local Dexie DB...`);
-        const cleanWithId = (arr) => arr ? arr.map(({ id, ...rest }, idx) => ({ id: idx + 1, ...rest })) : [];
-        if (seedInvoices.invoices.length > 0) await db.invoices.bulkPut(cleanWithId(seedInvoices.invoices));
-        if (seedInvoices.cashbills && seedInvoices.cashbills.length > 0) await db.cashbills.bulkPut(cleanWithId(seedInvoices.cashbills));
-        if (seedInvoices.dcs && seedInvoices.dcs.length > 0) await db.deliveryChellans.bulkPut(cleanWithId(seedInvoices.dcs));
-        window.dispatchEvent(new CustomEvent('sync-complete'));
+      const localInvoiceNos = new Set(allInvoices.map(i => normKey(i.invoiceNo)));
+      const missingSeedInvoices = (seedInvoices.invoices || []).filter(i => !localInvoiceNos.has(normKey(i.invoiceNo)));
+      if (missingSeedInvoices.length > 0) {
+        console.log(`[Fast Init] Populating ${missingSeedInvoices.length} missing seed invoices into Dexie...`);
+        const cleanWithId = missingSeedInvoices.map(({ id, ...rest }) => rest);
+        await db.invoices.bulkAdd(cleanWithId);
+      }
+
+      const allCashbills = await db.cashbills.toArray();
+      const localBillNos = new Set(allCashbills.map(b => normKey(b.billNo)));
+      const missingSeedBills = (seedInvoices.cashbills || []).filter(b => !localBillNos.has(normKey(b.billNo)));
+      if (missingSeedBills.length > 0) {
+        const cleanWithId = missingSeedBills.map(({ id, ...rest }) => rest);
+        await db.cashbills.bulkAdd(cleanWithId);
+      }
+
+      const allCust = await db.customers.toArray();
+      const localCustNames = new Set(allCust.map(c => normKey(c.companyName)));
+      const missingSeedCusts = (seedInvoices.customers || []).filter(c => !localCustNames.has(normKey(c.companyName)));
+      if (missingSeedCusts.length > 0) {
+        const cleanWithId = missingSeedCusts.map(({ id, ...rest }) => rest);
+        await db.customers.bulkAdd(cleanWithId);
+      }
+
+      if (seedInvoices.dcs && seedInvoices.dcs.length > 0) {
+        const allDcs = await db.deliveryChellans.toArray();
+        const localDcNos = new Set(allDcs.map(d => normKey(d.dcNo)));
+        const missingDcs = seedInvoices.dcs.filter(d => !localDcNos.has(normKey(d.dcNo)));
+        if (missingDcs.length > 0) {
+          await db.deliveryChellans.bulkAdd(missingDcs.map(({ id, ...rest }) => rest));
+        }
+      }
+
+      if (missingSeedInvoices.length > 0 || missingSeedBills.length > 0 || missingSeedCusts.length > 0) {
+        notifyLocalChange();
       }
     } catch (seedErr) {
       console.error('Initial seed error:', seedErr);
@@ -424,19 +457,18 @@ export async function syncFromCloud() {
   }
   try {
     const tableMappings = [
-      { local: db.customers, remote: 'customers', key: 'companyName', selectFields: '*' },
-      { local: db.invoices, remote: 'invoices', key: 'invoiceNo', selectFields: 'id, invoice_no, doc_name, date, client_company, grand_total, payment_status, paid_amount' },
-      { local: db.cashbills, remote: 'cashbills', key: 'billNo', selectFields: 'id, bill_no, doc_name, date, client_company, grand_total, payment_status, paid_amount' },
-      { local: db.deliveryChellans, remote: 'delivery_chellans', key: 'dcNo', selectFields: 'id, dc_no, doc_name, date, client_company' },
-      { local: db.quotations, remote: 'quotations', key: 'docName', selectFields: 'id, doc_name, date, client_company' },
-      { local: db.proformaInvoices, remote: 'proforma_invoices', key: 'invoiceNo', selectFields: 'id, invoice_no, doc_name, date, client_company, grand_total' },
-      { local: db.mediaLibrary, remote: 'media_library', key: 'name', selectFields: '*' },
-      { local: db.experienceCertificates, remote: 'experience_certificates', key: 'docName', selectFields: 'id, doc_name, driver_name, date' },
+      { local: db.customers, remote: 'customers', key: 'companyName' },
+      { local: db.invoices, remote: 'invoices', key: 'invoiceNo' },
+      { local: db.cashbills, remote: 'cashbills', key: 'billNo' },
+      { local: db.deliveryChellans, remote: 'delivery_chellans', key: 'dcNo' },
+      { local: db.quotations, remote: 'quotations', key: 'docName' },
+      { local: db.proformaInvoices, remote: 'proforma_invoices', key: 'invoiceNo' },
+      { local: db.mediaLibrary, remote: 'media_library', key: 'name' },
+      { local: db.experienceCertificates, remote: 'experience_certificates', key: 'docName' },
     ];
 
     // Helper to determine if a local record needs to be updated with fresh details from cloud
-    const shouldUpdateLocal = (localItem, cloudMetadata) => {
-      // If local item is missing full data payload, it MUST be fetched from cloud!
+    const shouldUpdateLocal = (localItem, cloudItem) => {
       if (!localItem.data || typeof localItem.data !== 'object' || Object.keys(localItem.data).length === 0) {
         return true;
       }
@@ -445,9 +477,9 @@ export async function syncFromCloud() {
         'docName', 'dcNo', 'invoiceNo', 'billNo', 'driverName', 'companyName', 'name'
       ];
       for (const field of fieldsToCompare) {
-        if (cloudMetadata[field] !== undefined && localItem[field] !== cloudMetadata[field]) {
+        if (cloudItem[field] !== undefined && localItem[field] !== cloudItem[field]) {
           const v1 = localItem[field];
-          const v2 = cloudMetadata[field];
+          const v2 = cloudItem[field];
           if (v1 === v2) continue;
           if (Number(v1) === Number(v2) && v1 !== null && v2 !== null) continue;
           if ((v1 === '' || v1 === null || v1 === undefined) && (v2 === '' || v2 === null || v2 === undefined)) continue;
@@ -457,13 +489,13 @@ export async function syncFromCloud() {
       return false;
     };
 
-    // Fetch all tables metadata and settings from Supabase in parallel with automatic retries
+    // Fetch all tables and settings from Supabase in parallel in 1 round trip
     const [syncResults, settsResult] = await Promise.all([
       Promise.all(tableMappings.map(async (mapping) => {
         const { data, error } = await fetchWithRetry(() =>
           supabase
             .from(mapping.remote)
-            .select(mapping.selectFields)
+            .select('*')
             .eq('business_id', BUSINESS_ID)
         );
         return { mapping, data, error };
@@ -471,10 +503,11 @@ export async function syncFromCloud() {
       fetchWithRetry(() => supabase.from('settings').select('*').eq('business_id', BUSINESS_ID))
     ]);
 
-    // Process all sync mappings concurrently
-    await Promise.all(syncResults.map(async ({ mapping, data: remoteMetadataList, error }) => {
+    // Process each table concurrently
+    let anyTableUpdated = false;
+    await Promise.all(syncResults.map(async ({ mapping, data: remoteRecords, error }) => {
       if (error) {
-        console.error(`Sync fetch metadata error for ${mapping.remote}:`, error.message || error);
+        console.error(`Sync fetch error for ${mapping.remote}:`, error.message || error);
         return;
       }
       try {
@@ -503,82 +536,42 @@ export async function syncFromCloud() {
         }
 
         if (duplicateLocalIds.length > 0) {
-          console.log(`Purging ${duplicateLocalIds.length} duplicate local items for ${mapping.remote}...`);
           await mapping.local.bulkDelete(duplicateLocalIds);
         }
 
         const localMap = seenKeys;
-
-        const idsToFetchFull = [];
-        
-        if (remoteMetadataList && remoteMetadataList.length > 0) {
-          for (const remoteMeta of remoteMetadataList) {
-            const cloudMeta = mapFromCloud(remoteMeta);
-            const keyValue = normKey(cloudMeta[mapping.key]);
-            if (keyValue) {
-              const exists = localMap.get(keyValue);
-              if (!exists || shouldUpdateLocal(exists, cloudMeta)) {
-                if (remoteMeta.id) {
-                  idsToFetchFull.push(remoteMeta.id);
-                }
-              }
-            }
-          }
-        }
-
-        // Fetch full records in small batches of 2 (prevents Supabase 57014 statement timeouts)
-        const fullRemoteRecords = [];
-        if (idsToFetchFull.length > 0 && mapping.selectFields !== '*') {
-          console.log(`Fetching ${idsToFetchFull.length} full records for ${mapping.remote}...`);
-          const batchSize = 2;
-          
-          for (let i = 0; i < idsToFetchFull.length; i += batchSize) {
-            const batchIds = idsToFetchFull.slice(i, i + batchSize);
-            const { data: batchData, error: batchErr } = await fetchWithRetry(() =>
-              supabase
-                .from(mapping.remote)
-                .select('*')
-                .eq('business_id', BUSINESS_ID)
-                .in('id', batchIds)
-            );
-              
-            if (batchErr) {
-              console.error(`Error fetching batch of full records for ${mapping.remote}:`, batchErr);
-            } else if (batchData) {
-              fullRemoteRecords.push(...batchData);
-            }
-          }
-        } else if (mapping.selectFields === '*') {
-          fullRemoteRecords.push(...(remoteMetadataList || []));
-        }
-
-        // Update local Dexie DB with the fetched full records
         const itemsToPut = [];
         const itemsToAdd = [];
         
-        for (const remoteItem of fullRemoteRecords) {
-          const cloudItem = mapFromCloud(remoteItem);
-          const keyValue = normKey(cloudItem[mapping.key]);
-          if (keyValue) {
-            const exists = localMap.get(keyValue);
-            if (exists) {
-              itemsToPut.push({ ...exists, ...cloudItem, id: exists.id });
-            } else {
-              const { id, ...newItem } = cloudItem;
-              itemsToAdd.push(newItem);
+        if (remoteRecords && remoteRecords.length > 0) {
+          for (const remoteItem of remoteRecords) {
+            const cloudItem = mapFromCloud(remoteItem);
+            const keyValue = normKey(cloudItem[mapping.key]);
+            if (keyValue) {
+              const exists = localMap.get(keyValue);
+              if (exists) {
+                if (shouldUpdateLocal(exists, cloudItem)) {
+                  itemsToPut.push({ ...exists, ...cloudItem, id: exists.id });
+                }
+              } else {
+                const { id, ...newItem } = cloudItem;
+                itemsToAdd.push(newItem);
+              }
             }
           }
         }
 
         if (itemsToPut.length > 0) {
           await mapping.local.bulkPut(itemsToPut);
+          anyTableUpdated = true;
         }
         if (itemsToAdd.length > 0) {
           await mapping.local.bulkAdd(itemsToAdd);
+          anyTableUpdated = true;
         }
 
-        // Push local changes to cloud if they don't exist there
-        const remoteKeys = new Set(remoteMetadataList ? remoteMetadataList.map(d => normKey(mapFromCloud(d)[mapping.key])) : []);
+        // Push local changes to cloud if they don't exist in cloud
+        const remoteKeys = new Set(remoteRecords ? remoteRecords.map(d => normKey(mapFromCloud(d)[mapping.key])) : []);
         const pushPromises = [];
         for (const localItem of localItems) {
           const localKey = localItem[mapping.key];
@@ -604,7 +597,7 @@ export async function syncFromCloud() {
     }
 
     console.log('--- Sync system STANDBY ---');
-    window.dispatchEvent(new CustomEvent('sync-complete'));
+    notifyLocalChange();
   } catch (err) {
     console.error('Core sync error:', err);
   }
@@ -612,13 +605,25 @@ export async function syncFromCloud() {
 
 // CRUD Functions
 export async function getAllCustomers() { return await db.customers.toArray(); }
-export async function saveCustomer(data) { const id = await db.customers.add(data); pushToCloud('customers', data); return id; }
-export async function updateCustomer(id, data) { const numericId = Number(id); await db.customers.update(numericId, data); pushToCloud('customers', data); }
+export async function saveCustomer(data) { 
+  const id = await db.customers.add(data); 
+  notifyLocalChange();
+  pushToCloud('customers', data); 
+  return id; 
+}
+export async function updateCustomer(id, data) { 
+  const numericId = Number(id); 
+  await db.customers.update(numericId, data); 
+  notifyLocalChange();
+  pushToCloud('customers', data); 
+}
 export async function deleteCustomer(id) { 
   const numericId = Number(id);
   const item = await db.customers.get(numericId); 
   if (item) removeFromCloud('customers', { companyName: item.companyName });
-  return await db.customers.delete(numericId); 
+  const result = await db.customers.delete(numericId); 
+  notifyLocalChange();
+  return result;
 }
 
 export async function saveInvoice(data) {
@@ -626,6 +631,7 @@ export async function saveInvoice(data) {
   if (data && data.invoiceNo) {
     await updateInvoiceCounter(data.invoiceNo);
   }
+  notifyLocalChange();
   pushToCloud('invoices', data);
   return id;
 }
@@ -636,58 +642,121 @@ export async function updateInvoice(id, data) {
   if (data && data.invoiceNo) {
     await updateInvoiceCounter(data.invoiceNo);
   }
+  notifyLocalChange();
   pushToCloud('invoices', data);
 }
 export async function deleteInvoice(id) {
   const numericId = Number(id);
   const item = await db.invoices.get(numericId);
   if (item) removeFromCloud('invoices', { invoiceNo: item.invoiceNo });
-  return await db.invoices.delete(numericId);
+  const result = await db.invoices.delete(numericId);
+  notifyLocalChange();
+  return result;
 }
 
-export async function saveCashBill(data) { const id = await db.cashbills.add(data); pushToCloud('cashbills', data); return id; }
-export async function updateCashBill(id, data) { const numericId = Number(id); await db.cashbills.update(numericId, data); pushToCloud('cashbills', data); }
+export async function saveCashBill(data) { 
+  const id = await db.cashbills.add(data); 
+  notifyLocalChange();
+  pushToCloud('cashbills', data); 
+  return id; 
+}
+export async function updateCashBill(id, data) { 
+  const numericId = Number(id); 
+  await db.cashbills.update(numericId, data); 
+  notifyLocalChange();
+  pushToCloud('cashbills', data); 
+}
 export async function deleteCashBill(id) {
   const numericId = Number(id);
   const item = await db.cashbills.get(numericId);
   if (item) removeFromCloud('cashbills', { billNo: item.billNo });
-  return await db.cashbills.delete(numericId);
+  const result = await db.cashbills.delete(numericId);
+  notifyLocalChange();
+  return result;
 }
 
-export async function saveDc(data) { const id = await db.deliveryChellans.add(data); pushToCloud('delivery_chellans', data); return id; }
-export async function updateDc(id, data) { const numericId = Number(id); await db.deliveryChellans.update(numericId, data); pushToCloud('delivery_chellans', data); }
+export async function saveDc(data) { 
+  const id = await db.deliveryChellans.add(data); 
+  notifyLocalChange();
+  pushToCloud('delivery_chellans', data); 
+  return id; 
+}
+export async function updateDc(id, data) { 
+  const numericId = Number(id); 
+  await db.deliveryChellans.update(numericId, data); 
+  notifyLocalChange();
+  pushToCloud('delivery_chellans', data); 
+}
 export async function deleteDc(id) {
   const numericId = Number(id);
   const item = await db.deliveryChellans.get(numericId);
   if (item) removeFromCloud('delivery_chellans', { dcNo: item.dcNo });
-  return await db.deliveryChellans.delete(numericId);
+  const result = await db.deliveryChellans.delete(numericId);
+  notifyLocalChange();
+  return result;
 }
 
-export async function saveQuotation(data) { const id = await db.quotations.add(data); pushToCloud('quotations', data); return id; }
-export async function updateQuotation(id, data) { const numericId = Number(id); await db.quotations.update(numericId, data); pushToCloud('quotations', data); }
+export async function saveQuotation(data) { 
+  const id = await db.quotations.add(data); 
+  notifyLocalChange();
+  pushToCloud('quotations', data); 
+  return id; 
+}
+export async function updateQuotation(id, data) { 
+  const numericId = Number(id); 
+  await db.quotations.update(numericId, data); 
+  notifyLocalChange();
+  pushToCloud('quotations', data); 
+}
 export async function deleteQuotation(id) {
   const numericId = Number(id);
   const item = await db.quotations.get(numericId);
   if (item) removeFromCloud('quotations', { docName: item.docName });
-  return await db.quotations.delete(numericId);
+  const result = await db.quotations.delete(numericId);
+  notifyLocalChange();
+  return result;
 }
 
-export async function saveProformaInvoice(data) { const id = await db.proformaInvoices.add(data); pushToCloud('proforma_invoices', data); return id; }
-export async function updateProformaInvoice(id, data) { const numericId = Number(id); await db.proformaInvoices.update(numericId, data); pushToCloud('proforma_invoices', data); }
+export async function saveProformaInvoice(data) { 
+  const id = await db.proformaInvoices.add(data); 
+  notifyLocalChange();
+  pushToCloud('proforma_invoices', data); 
+  return id; 
+}
+export async function updateProformaInvoice(id, data) { 
+  const numericId = Number(id); 
+  await db.proformaInvoices.update(numericId, data); 
+  notifyLocalChange();
+  pushToCloud('proforma_invoices', data); 
+}
 export async function deleteProformaInvoice(id) {
   const numericId = Number(id);
   const item = await db.proformaInvoices.get(numericId);
   if (item) removeFromCloud('proforma_invoices', { invoiceNo: item.invoiceNo });
-  return await db.proformaInvoices.delete(numericId);
+  const result = await db.proformaInvoices.delete(numericId);
+  notifyLocalChange();
+  return result;
 }
 
-export async function saveExperienceCertificate(data) { const id = await db.experienceCertificates.add(data); pushToCloud('experience_certificates', data); return id; }
-export async function updateExperienceCertificate(id, data) { const numericId = Number(id); await db.experienceCertificates.update(numericId, data); pushToCloud('experience_certificates', data); }
+export async function saveExperienceCertificate(data) { 
+  const id = await db.experienceCertificates.add(data); 
+  notifyLocalChange();
+  pushToCloud('experience_certificates', data); 
+  return id; 
+}
+export async function updateExperienceCertificate(id, data) { 
+  const numericId = Number(id); 
+  await db.experienceCertificates.update(numericId, data); 
+  notifyLocalChange();
+  pushToCloud('experience_certificates', data); 
+}
 export async function deleteExperienceCertificate(id) {
   const numericId = Number(id);
   const item = await db.experienceCertificates.get(numericId);
   if (item) removeFromCloud('experience_certificates', { docName: item.docName });
-  return await db.experienceCertificates.delete(numericId);
+  const result = await db.experienceCertificates.delete(numericId);
+  notifyLocalChange();
+  return result;
 }
 
 export async function getNextCashBillNumber() { const counter = await db.settings.get('cashBillCounter'); return String(counter ? counter.value : 1).padStart(3, '0'); }
@@ -696,19 +765,21 @@ export async function getNextDcNumber() { const counter = await db.settings.get(
 export async function updateDcCounter(n) { const num = parseInt(n); if (!isNaN(num)) await db.settings.put({ key: 'dcCounter', value: num + 1 }); }
 
 export async function getAllMediaItems() { return (await db.mediaLibrary.toArray()).sort((a,b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)); }
-export async function saveMediaItem(data) { const id = await db.mediaLibrary.add(data); pushToCloud('media_library', data); return id; }
-export async function updateMediaItem(id, data) { const numericId = Number(id); await db.mediaLibrary.update(numericId, data); const item = await db.mediaLibrary.get(numericId); if (item) pushToCloud('media_library', item); }
+export async function saveMediaItem(data) { const id = await db.mediaLibrary.add(data); notifyLocalChange(); pushToCloud('media_library', data); return id; }
+export async function updateMediaItem(id, data) { const numericId = Number(id); await db.mediaLibrary.update(numericId, data); const item = await db.mediaLibrary.get(numericId); notifyLocalChange(); if (item) pushToCloud('media_library', item); }
 export async function deleteMediaItem(id) {
   const numericId = Number(id);
   const item = await db.mediaLibrary.get(numericId);
   if (item) removeFromCloud('media_library', { name: item.name });
-  return await db.mediaLibrary.delete(numericId);
+  const result = await db.mediaLibrary.delete(numericId);
+  notifyLocalChange();
+  return result;
 }
 
 export async function getAllVehicleSections() { return (await db.vehicleDetails.toArray()).sort((a,b) => (a.order||0) - (b.order||0)); }
-export async function saveVehicleSection(data) { return await db.vehicleDetails.add(data); }
-export async function updateVehicleSection(id, data) { const numericId = Number(id); return await db.vehicleDetails.update(numericId, data); }
-export async function deleteVehicleSection(id) { const numericId = Number(id); return await db.vehicleDetails.delete(numericId); }
+export async function saveVehicleSection(data) { const res = await db.vehicleDetails.add(data); notifyLocalChange(); return res; }
+export async function updateVehicleSection(id, data) { const numericId = Number(id); const res = await db.vehicleDetails.update(numericId, data); notifyLocalChange(); return res; }
+export async function deleteVehicleSection(id) { const numericId = Number(id); const res = await db.vehicleDetails.delete(numericId); notifyLocalChange(); return res; }
 
 export async function updatePaymentStatus(id, type, paidAmount, status) {
   const numericId = Number(id);
@@ -716,9 +787,11 @@ export async function updatePaymentStatus(id, type, paidAmount, status) {
   const remoteTable = type === 'invoice' ? 'invoices' : 'cashbills';
   
   await table.update(numericId, { paidAmount, paymentStatus: status });
+  notifyLocalChange();
   const updatedItem = await table.get(numericId);
   if (updatedItem) pushToCloud(remoteTable, updatedItem);
 }
 
 export async function getCompanyProfile() { const p = await db.settings.get('companyProfile'); return p ? p.value : COMPANY; }
 export async function updateCompanyProfile(data) { await db.settings.put({ key: 'companyProfile', value: data }); pushToCloud('settings', { key: 'companyProfile', value: data }); }
+
