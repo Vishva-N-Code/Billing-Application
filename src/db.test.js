@@ -27,7 +27,13 @@ vi.mock('dexie', () => {
       this.cashbills = {};
       this.deliveryChellans = {};
       this.quotations = {};
-      this.proformaInvoices = {};
+      this.proformaInvoices = {
+        toArray: vi.fn().mockResolvedValue([]),
+        add: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        get: vi.fn()
+      };
       this.mediaLibrary = {};
       this.experienceCertificates = {};
     }
@@ -69,7 +75,7 @@ vi.mock('./supabase', () => {
 });
 
 // Import db and supabase
-import { db, getNextInvoiceNumber, updateInvoiceCounter, pushToCloud, removeFromCloud } from './db';
+import { db, getNextInvoiceNumber, updateInvoiceCounter, getNextProformaInvoiceNumber, pushToCloud, removeFromCloud } from './db';
 import { supabase, BUSINESS_ID } from './supabase';
 
 describe('Database and Sync Operations', () => {
@@ -114,7 +120,31 @@ describe('Database and Sync Operations', () => {
       await updateInvoiceCounter('046');
       expect(db.settings.put).toHaveBeenCalledWith({ key: 'invoiceCounter', value: 47 });
     });
+
+    it('getNextProformaInvoiceNumber should allocate prefix-based numbers like K001 for Kotec and F001 for Fuso', async () => {
+      db.proformaInvoices.toArray.mockResolvedValue([]);
+      
+      const kotecNum = await getNextProformaInvoiceNumber('KOTEC AUTOMOTIVE SERVICES INDIA PRIVATE LIMITED');
+      expect(kotecNum).toBe('K001');
+
+      const fusoNum = await getNextProformaInvoiceNumber('FUSO GLASS INDIA PVT LTD');
+      expect(fusoNum).toBe('F001');
+    });
+
+    it('getNextProformaInvoiceNumber should increment based on existing proforma invoices in database', async () => {
+      db.proformaInvoices.toArray.mockResolvedValue([
+        { invoiceNo: 'K001', clientCompany: 'KOTEC AUTOMOTIVE SERVICES INDIA PRIVATE LIMITED' },
+        { invoiceNo: 'F001', clientCompany: 'FUSO GLASS INDIA PVT LTD' }
+      ]);
+
+      const nextKotec = await getNextProformaInvoiceNumber('KOTEC AUTOMOTIVE SERVICES INDIA PRIVATE LIMITED');
+      expect(nextKotec).toBe('K002');
+
+      const nextFuso = await getNextProformaInvoiceNumber('FUSO GLASS INDIA PVT LTD');
+      expect(nextFuso).toBe('F002');
+    });
   });
+
 
   describe('Cloud Sync Mappings and Sync Operations', () => {
     it('pushToCloud should map camelCase keys to snake_case for Supabase integration', async () => {

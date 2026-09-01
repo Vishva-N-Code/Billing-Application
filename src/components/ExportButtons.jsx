@@ -56,32 +56,62 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
   const exportPDF = async (returnBlob = false) => {
     setExporting(true);
     try {
-      const canvas = await getCanvas();
-      if (!canvas) { setExporting(false); return null; }
-      
-      const imgData = canvas.toDataURL('image/jpeg', 0.95);
+      if (!targetRef.current) { setExporting(false); return null; }
+      const el = targetRef.current;
+      const previewPages = Array.from(el.querySelectorAll('.doc-preview'));
+
       const pdf = new jsPDF('p', 'mm', 'a4');
-      
       const pdfW = 210;
       const pdfH = 297;
-      const imgW = canvas.width;
-      const imgH = canvas.height;
-      const ratio = pdfW / imgW;
-      const totalH_mm = imgH * ratio;
 
-      let heightLeft = totalH_mm;
-      let position = 0;
+      if (previewPages.length > 1) {
+        document.body.classList.add('exporting-pdf');
+        await new Promise(resolve => setTimeout(resolve, 400));
 
-      // Add first page
-      pdf.addImage(imgData, 'JPEG', 0, position, pdfW, totalH_mm);
-      heightLeft -= pdfH;
+        for (let i = 0; i < previewPages.length; i++) {
+          const pageEl = previewPages[i];
+          const canvas = await html2canvas(pageEl, {
+            scale: 2.5,
+            useCORS: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            windowWidth: 794,
+            allowTaint: true,
+            scrollX: 0,
+            scrollY: 0,
+          });
 
-      // Add subsequent pages if content overflows
-      while (heightLeft > 0) {
-        position -= pdfH;
-        pdf.addPage();
+          if (canvas) {
+            const pageImgData = canvas.toDataURL('image/jpeg', 0.95);
+            if (i > 0) pdf.addPage();
+            pdf.addImage(pageImgData, 'JPEG', 0, 0, pdfW, pdfH);
+          }
+        }
+        document.body.classList.remove('exporting-pdf');
+      } else {
+        const canvas = await getCanvas();
+        if (!canvas) { setExporting(false); return null; }
+        
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
+        const imgW = canvas.width;
+        const imgH = canvas.height;
+        const ratio = pdfW / imgW;
+        const totalH_mm = imgH * ratio;
+
+        let heightLeft = totalH_mm;
+        let position = 0;
+
+        // Add first page
         pdf.addImage(imgData, 'JPEG', 0, position, pdfW, totalH_mm);
         heightLeft -= pdfH;
+
+        // Add subsequent pages if content overflows
+        while (heightLeft > 0) {
+          position -= pdfH;
+          pdf.addPage();
+          pdf.addImage(imgData, 'JPEG', 0, position, pdfW, totalH_mm);
+          heightLeft -= pdfH;
+        }
       }
 
       if (returnBlob) {
@@ -93,10 +123,12 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
       pdf.save(`${cleanName}.pdf`);
       if (onExport) onExport();
     } catch (err) {
+      document.body.classList.remove('exporting-pdf');
       console.error('PDF export error:', err);
     }
     setExporting(false);
   };
+
 
   const exportJPG = async (returnBlob = false) => {
     setExporting(true);

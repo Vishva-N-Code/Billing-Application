@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ComposedChart, Bar, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -35,31 +35,39 @@ export default function Dashboard() {
   const [selectedYear, setSelectedYear] = useState('all');
   const [availableYears, setAvailableYears] = useState([]);
   const [chartMode, setChartMode] = useState('bars'); // 'bars' | 'area'
+  const isFetchingRef = useRef(false);
 
   useEffect(() => {
-    fetchDashboardData();
+    fetchDashboardData(false);
   }, [selectedYear]);
 
-  // Listen for background sync completion to refresh dashboard automatically
+  // Listen for background sync completion to refresh dashboard automatically (debounced)
   useEffect(() => {
+    let timer;
     const handleSyncComplete = () => {
-      fetchDashboardData(false);
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        fetchDashboardData(false);
+      }, 150);
     };
     window.addEventListener('sync-complete', handleSyncComplete);
-    return () => window.removeEventListener('sync-complete', handleSyncComplete);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('sync-complete', handleSyncComplete);
+    };
   }, [selectedYear]);
 
   const fetchDashboardData = async (showLoadingSpinner = false) => {
-    if (showLoadingSpinner) {
-      setLoading(true);
-    }
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (showLoadingSpinner) setLoading(true);
+
     try {
-      // Parallel fetch from local Dexie database
-      const [invoices, cashbills, vehicleSections, customers] = await Promise.all([
+      // Parallel fast fetch from local Dexie database
+      const [invoices, cashbills, vehicleSections] = await Promise.all([
         db.invoices.toArray(),
         db.cashbills.toArray(),
-        db.vehicleDetails.toArray(),
-        db.customers.toArray()
+        db.vehicleDetails.toArray()
       ]);
       
       // 1. Calculate vehicle document expiry alerts
@@ -90,16 +98,49 @@ export default function Dashboard() {
       setVehicleAlerts(alerts.sort((a, b) => a.diffDays - b.diffDays));
       
       const allBillingDocs = [
-        ...invoices.map(i => ({ ...i, type: 'Tax Invoice', routePath: '/tax-invoice' })), 
-        ...cashbills.map(c => ({ ...c, type: 'Cash Bill', routePath: '/cash-bill' }))
+        ...invoices.map(i => ({ 
+          id: i.id, 
+          invoiceNo: i.invoiceNo, 
+          docName: i.docName, 
+          date: i.date, 
+          clientCompany: i.clientCompany, 
+          grandTotal: i.grandTotal, 
+          paymentStatus: i.paymentStatus, 
+          paidAmount: i.paidAmount, 
+          type: 'Tax Invoice', 
+          routePath: '/tax-invoice' 
+        })), 
+        ...cashbills.map(c => ({ 
+          id: c.id, 
+          billNo: c.billNo, 
+          docName: c.docName, 
+          date: c.date, 
+          clientCompany: c.clientCompany, 
+          grandTotal: c.grandTotal, 
+          paymentStatus: c.paymentStatus, 
+          paidAmount: c.paidAmount, 
+          type: 'Cash Bill', 
+          routePath: '/cash-bill' 
+        }))
       ];
       
       // Get all available years for filtering
-      const years = [...new Set(allBillingDocs.map(d => new Date(d.date).getFullYear()))].filter(Boolean).sort((a, b) => b - a);
+      const years = [...new Set(allBillingDocs.map(d => {
+        if (!d.date) return null;
+        const dt = new Date(d.date);
+        return isNaN(dt.getTime()) ? null : dt.getFullYear();
+      }))].filter(Boolean).sort((a, b) => b - a);
       setAvailableYears(years);
 
       // Filter docs according to selected year
-      const filteredDocs = selectedYear === 'all' ? allBillingDocs : allBillingDocs.filter(d => new Date(d.date).getFullYear() === selectedYear);
+      const filteredDocs = selectedYear === 'all' 
+        ? allBillingDocs 
+        : allBillingDocs.filter(d => {
+            if (!d.date) return false;
+            const dt = new Date(d.date);
+            return !isNaN(dt.getTime()) && dt.getFullYear() === selectedYear;
+          });
+
       const taxInvoicesOnly = filteredDocs.filter(d => d.type === 'Tax Invoice');
       const cashBillsOnly = filteredDocs.filter(d => d.type === 'Cash Bill');
 
@@ -130,8 +171,9 @@ export default function Dashboard() {
       const currentYear = now.getFullYear();
       const currentMonthIncome = taxInvoicesOnly
         .filter(d => {
+          if (!d.date) return false;
           const dt = new Date(d.date);
-          return dt.getMonth() === currentMonth && dt.getFullYear() === currentYear;
+          return !isNaN(dt.getTime()) && dt.getMonth() === currentMonth && dt.getFullYear() === currentYear;
         })
         .reduce((sum, d) => sum + (Number(d.grandTotal) || 0), 0);
 
@@ -139,14 +181,20 @@ export default function Dashboard() {
       const prevMonthYear = currentMonth === 0 ? currentYear - 1 : currentYear;
       const prevMonthIncome = taxInvoicesOnly
         .filter(d => {
+          if (!d.date) return false;
           const dt = new Date(d.date);
-          return dt.getMonth() === prevMonth && dt.getFullYear() === prevMonthYear;
+          return !isNaN(dt.getTime()) && dt.getMonth() === prevMonth && dt.getFullYear() === prevMonthYear;
         })
         .reduce((sum, d) => sum + (Number(d.grandTotal) || 0), 0);
 
-      const momGrowth = prevMonthIncome > 0 
-        ? Math.round(((currentMonthIncome - prevMonthIncome) / prevMonthIncome) * 100)
-        : (currentMonthIncome > 0 ? 100 : 0);
+      let momGrowth = 0;
+      if (currentMonthIncome === 0) {
+        momGrowth = 0;
+      } else if (prevMonthIncome > 0) {
+        momGrowth = Math.round(((currentMonthIncome - prevMonthIncome) / prevMonthIncome) * 100);
+      } else if (currentMonthIncome > 0) {
+        momGrowth = 100;
+      }
       
       setStats({
         totalBilled,
@@ -163,7 +211,11 @@ export default function Dashboard() {
       // 3. Trend Data - Income Generated (Month-wise)
       if (selectedYear === 'all' && years.length > 1) {
         const yearlyAgg = years.slice().reverse().map(y => {
-          const docs = invoices.filter(d => new Date(d.date).getFullYear() === y);
+          const docs = invoices.filter(d => {
+            if (!d.date) return false;
+            const dt = new Date(d.date);
+            return !isNaN(dt.getTime()) && dt.getFullYear() === y;
+          });
           const income = docs.reduce((sum, d) => sum + (Number(d.grandTotal) || 0), 0);
           const tax = docs.reduce((sum, d) => {
             const val = Number(d.grandTotal) || 0;
@@ -176,7 +228,11 @@ export default function Dashboard() {
       } else {
         const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         const monthlyAgg = months.map((m, idx) => {
-          const docs = taxInvoicesOnly.filter(d => new Date(d.date).getMonth() === idx);
+          const docs = taxInvoicesOnly.filter(d => {
+            if (!d.date) return false;
+            const dt = new Date(d.date);
+            return !isNaN(dt.getTime()) && dt.getMonth() === idx;
+          });
           const income = docs.reduce((sum, d) => sum + (Number(d.grandTotal) || 0), 0);
           const tax = docs.reduce((sum, d) => {
             const val = Number(d.grandTotal) || 0;
@@ -219,6 +275,7 @@ export default function Dashboard() {
     } catch (error) {
       console.error("Dashboard error:", error);
     } finally {
+      isFetchingRef.current = false;
       setLoading(false);
     }
   };
@@ -238,6 +295,7 @@ export default function Dashboard() {
   };
 
   const COLORS = ['#ffb700', '#00b0ff', '#00e676', '#ff4d4d'];
+
 
   if (loading) {
     return (

@@ -1,7 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, getCompanyProfile, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveProformaInvoice, deleteProformaInvoice, updateProformaInvoice, db } from '../db';
+import { 
+  COMPANY, 
+  getCompanyProfile, 
+  getNextProformaInvoiceNumber, 
+  initSettings, 
+  saveProformaInvoice, 
+  deleteProformaInvoice, 
+  updateProformaInvoice, 
+  db 
+} from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 import CustomDateInput from '../components/CustomDateInput';
@@ -11,10 +20,14 @@ export default function ProformaInvoice({ exportItem }) {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState('form');
   const [savedProformas, setSavedProformas] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const [form, setForm] = useState({
     docName: '',
     invoiceNo: '',
+    date: new Date().toISOString().split('T')[0],
     clientCompany: '',
     clientAddress: '',
     configs: [{
@@ -48,8 +61,8 @@ export default function ProformaInvoice({ exportItem }) {
       }
 
       await initSettings();
-      const num = await getNextInvoiceNumber();
-      setForm(f => ({ ...f, invoiceNo: num }));
+      const allCust = await db.customers.toArray();
+      setCustomers(allCust);
       await fetchSaved();
 
       const profile = await getCompanyProfile();
@@ -57,6 +70,14 @@ export default function ProformaInvoice({ exportItem }) {
       setForm(f => ({ ...f, termsAndConditions: '' }));
     };
     init();
+
+    const handleSyncComplete = async () => {
+      await fetchSaved();
+      const allCust = await db.customers.toArray();
+      setCustomers(allCust);
+    };
+    window.addEventListener('sync-complete', handleSyncComplete);
+    return () => window.removeEventListener('sync-complete', handleSyncComplete);
   }, [location.state, exportItem]);
 
   const loadProforma = (pf) => {
@@ -72,11 +93,45 @@ export default function ProformaInvoice({ exportItem }) {
     }
   };
 
+  const handleCompanySearch = async (val) => {
+    setForm(f => ({ ...f, clientCompany: val }));
+    
+    if (val.trim().length >= 1) {
+      const nextNum = await getNextProformaInvoiceNumber(val);
+      setForm(f => ({ ...f, clientCompany: val, invoiceNo: nextNum }));
+    }
+
+    if (val.length >= 2) {
+      const matches = customers.filter(c => {
+        const name = (c.companyName || c.company_name || '').toLowerCase();
+        return name.includes(val.toLowerCase());
+      });
+      setSuggestions(matches);
+      setShowSuggestions(matches.length > 0);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const selectCustomer = async (customer) => {
+    const compName = customer.companyName || customer.company_name || '';
+    const nextNum = await getNextProformaInvoiceNumber(compName);
+    setForm(f => ({
+      ...f,
+      clientCompany: compName,
+      clientAddress: customer.address || '',
+      invoiceNo: nextNum
+    }));
+    setShowSuggestions(false);
+  };
+
   const addItem = (cfgIndex) => {
     const newConfigs = [...form.configs];
     newConfigs[cfgIndex].items.push({ date: '', description: '', timesheetNo: '', quantity: '', rate: '' });
     setForm({ ...form, configs: newConfigs });
   };
+
   const removeItem = (cfgIndex, itemIndex) => {
     const newConfigs = [...form.configs];
     if (newConfigs[cfgIndex].items.length > 1) {
@@ -84,6 +139,7 @@ export default function ProformaInvoice({ exportItem }) {
       setForm({ ...form, configs: newConfigs });
     }
   };
+
   const updateItem = (cfgIndex, itemIndex, field, value) => {
     const newConfigs = [...form.configs];
     const item = newConfigs[cfgIndex].items[itemIndex];
@@ -111,10 +167,6 @@ export default function ProformaInvoice({ exportItem }) {
     return sum + cfg.items.reduce((s, item) => s + calcAmount(item), 0);
   }, 0) || 0;
 
-  const hasShifts = form.configs?.some(c => c.unitType === 'shifts');
-  const hasHours = form.configs?.some(c => c.unitType === 'hours');
-  const unitLabel = (hasShifts && hasHours) ? 'Shifts / Hours' : hasHours ? 'Hours' : 'Shifts';
-
   const formatCurrency = (val) => {
     return parseFloat(val || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
@@ -122,13 +174,13 @@ export default function ProformaInvoice({ exportItem }) {
   const formatDate = (dateStr) => {
     if (!dateStr) return '';
     const d = new Date(dateStr);
-    return d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('en-IN', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
 
   const handleSaveOnly = async () => {
     const invoiceData = {
       invoiceNo: form.invoiceNo,
-      docName: form.docName || `Proforma ${form.invoiceNo}`,
+      docName: form.docName || `Proforma ${form.invoiceNo || form.clientCompany}`,
       date: form.date,
       clientCompany: form.clientCompany,
       grandTotal: grandTotal,
@@ -148,7 +200,7 @@ export default function ProformaInvoice({ exportItem }) {
   const handleExport = async () => {
     const invoiceData = {
       invoiceNo: form.invoiceNo,
-      docName: form.docName || `Proforma ${form.invoiceNo}`,
+      docName: form.docName || `Proforma ${form.invoiceNo || form.clientCompany}`,
       date: form.date,
       clientCompany: form.clientCompany,
       grandTotal: grandTotal,
@@ -162,10 +214,45 @@ export default function ProformaInvoice({ exportItem }) {
     }
     await fetchSaved();
     
-    await updateInvoiceCounter(form.invoiceNo);
-    const nextNum = await getNextInvoiceNumber();
+    // Auto-increment the proforma invoice number for this company prefix
+    const nextNum = await getNextProformaInvoiceNumber(form.clientCompany);
     setForm(f => ({ ...f, invoiceNo: nextNum, id: undefined }));
-    alert('Invoice saved and number auto-incremented based on your entry!');
+    alert('Proforma invoice saved successfully!');
+  };
+
+  // Helper for dynamic page capacity partitioning
+  const paginateProformaRows = (printRows) => {
+    const total = printRows.length;
+    if (total <= 16) {
+      return [printRows];
+    }
+    
+    const pages = [];
+    let offset = 0;
+    
+    while (offset < total) {
+      const isFirst = pages.length === 0;
+      const remaining = total - offset;
+      
+      if (isFirst) {
+        // Page 1 takes up to 18 items with full TO header
+        const take = Math.min(18, remaining);
+        pages.push(printRows.slice(offset, offset + take));
+        offset += take;
+      } else {
+        // If remaining items fit comfortably on the last page with footer (<= 16 items)
+        if (remaining <= 16) {
+          pages.push(printRows.slice(offset));
+          offset = total;
+        } else {
+          // Middle page: take up to 22, but make sure at least 2 items remain for the final page
+          const take = Math.min(remaining - 2, 22);
+          pages.push(printRows.slice(offset, offset + take));
+          offset += take;
+        }
+      }
+    }
+    return pages;
   };
 
   return (
@@ -194,24 +281,42 @@ export default function ProformaInvoice({ exportItem }) {
 
             <div className="card" style={{ marginBottom: '16px' }}>
               <div className="card-title">Client Details</div>
-              <div className="form-group">
+              <div className="form-group autocomplete-wrapper">
                 <label>To (Company Name)</label>
-                <input className="form-control" placeholder="Client company name"
-                  value={form.clientCompany} onChange={e => setForm({ ...form, clientCompany: e.target.value })} />
+                <input 
+                  className="form-control" 
+                  placeholder="Client company name (e.g. Kotec, Fuso...)"
+                  value={form.clientCompany} 
+                  onChange={e => handleCompanySearch(e.target.value)}
+                  onFocus={() => form.clientCompany.length >= 2 && handleCompanySearch(form.clientCompany)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                />
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="autocomplete-dropdown">
+                    {suggestions.map(c => (
+                      <div key={c.id} className="autocomplete-item" onMouseDown={() => selectCustomer(c)}>
+                        <div className="company-name">{c.companyName || c.company_name}</div>
+                        <div className="gstin-text">{c.gstin ? `${c.gstin} | ` : ''}{c.address}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label>Address</label>
                 <textarea className="form-control" placeholder="Client address" rows={2}
                   value={form.clientAddress} onChange={e => setForm({ ...form, clientAddress: e.target.value })} />
               </div>
-              <div className="form-group">
-                <label>Date</label>
-                <CustomDateInput className="form-control" value={form.date} onChange={val => setForm({ ...form, date: val })} />
-              </div>
-              <div className="form-group">
-                <label>Invoice No.</label>
-                <input className="form-control" placeholder="Invoice Number"
-                  value={form.invoiceNo} onChange={e => setForm({ ...form, invoiceNo: e.target.value })} />
+              <div className="form-row form-row-2">
+                <div className="form-group">
+                  <label>Date</label>
+                  <CustomDateInput className="form-control" value={form.date} onChange={val => setForm({ ...form, date: val })} />
+                </div>
+                <div className="form-group">
+                  <label>Invoice No. (Auto-allocated per company)</label>
+                  <input className="form-control" placeholder="e.g. K001, F001..."
+                    value={form.invoiceNo} onChange={e => setForm({ ...form, invoiceNo: e.target.value })} />
+                </div>
               </div>
             </div>
 
@@ -364,200 +469,227 @@ export default function ProformaInvoice({ exportItem }) {
             <div className="doc-preview-container">
               <div ref={previewRef} className="print-capture-wrap">
                 {(() => {
-                const printRows = [];
-                let globalItemIndex = 0;
-                form.configs?.forEach((config) => {
-                  printRows.push({ isHeader: true, config });
-                  config.items.forEach(item => {
-                    globalItemIndex++;
-                    printRows.push({ isItem: true, item, config, sno: globalItemIndex });
+                  const printRows = [];
+                  let globalItemIndex = 0;
+                  form.configs?.forEach((config) => {
+                    printRows.push({ isHeader: true, config });
+                    config.items.forEach(item => {
+                      globalItemIndex++;
+                      printRows.push({ isItem: true, item, config, sno: globalItemIndex });
+                    });
                   });
-                });
-                const itemsPerPage = 8;
-                const PAGES = Math.ceil(Math.max(1, printRows.length) / itemsPerPage);
-                
-                return Array.from({ length: PAGES }, (_, pageIndex) => {
-                  const pageRows = printRows.slice(pageIndex * itemsPerPage, (pageIndex + 1) * itemsPerPage);
-                  const isFirstPage = pageIndex === 0;
-                  const isLastPage = pageIndex === PAGES - 1;
-                  return (
-            <div key={pageIndex} className="doc-preview">
-              <div className="doc-preview-inner">
-                {/* Header */}
-                <div style={{ textAlign: 'center', marginBottom: '4px' }}>
-                  <div className="doc-header">
-                    <img src="/logo.png" alt="Logo" className="logo-img" />
-                    <span className="company-title" style={{ fontSize: '1.5rem' }}>{companyProfile.name}</span>
-                  </div>
-                  <div className="doc-subheader">{companyProfile.tagline}</div>
-                  <div className="doc-company-contacts">
-                    Email: {companyProfile.email} &nbsp;&nbsp; mobile: {companyProfile.mobile}
-                  </div>
-                  <div className="doc-company-contacts">
-                    GST NUMBER: {companyProfile.gstin} &nbsp;&nbsp;&nbsp;&nbsp; Website: {companyProfile.website}
-                  </div>
-                </div>
 
-                <div style={{ height: '2px', background: '#c8952e', margin: '10px 0', width: '100%' }}></div>
+                  const paginatedPages = paginateProformaRows(printRows);
+                  const PAGES = paginatedPages.length;
+                  
+                  return paginatedPages.map((pageRows, pageIndex) => {
+                    const isFirstPage = pageIndex === 0;
+                    const isLastPage = pageIndex === PAGES - 1;
+                    
+                    return (
+                      <div key={pageIndex} className="doc-preview" style={{ marginBottom: pageIndex < PAGES - 1 ? '20px' : '0' }}>
+                        <div className="doc-preview-inner">
+                          {/* Header - Always on every page */}
+                          <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+                            <div className="doc-header">
+                              <img src="/logo.png" alt="Logo" className="logo-img" />
+                              <span className="company-title" style={{ fontSize: '1.5rem' }}>{companyProfile.name}</span>
+                            </div>
+                            <div className="doc-subheader">{companyProfile.tagline}</div>
+                            <div className="doc-company-contacts">
+                              Email: {companyProfile.email} &nbsp;&nbsp; mobile: {companyProfile.mobile}
+                            </div>
+                            <div className="doc-company-contacts">
+                              GST NUMBER: {companyProfile.gstin} &nbsp;&nbsp;&nbsp;&nbsp; Website: {companyProfile.website}
+                            </div>
+                          </div>
 
-                <div className="invoice-title" style={{ margin: '15px 0', fontSize: '1.15rem' }}>
-                  PROFORMA INVOICE {PAGES > 1 && `(Page ${pageIndex + 1} of ${PAGES})`}
-                </div>
+                          <div style={{ height: '2px', background: '#c8952e', margin: '8px 0', width: '100%' }}></div>
 
-                {/* Client details & Date - ONLY ON FIRST PAGE */}
-                {isFirstPage && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>TO:</div>
-                      <div style={{ paddingLeft: '20px', fontSize: '0.85rem' }}>
-                        <strong>{form.clientCompany || '_______________'}</strong>
-                        {form.clientAddress && (
-                          <div style={{ fontSize: '0.8rem', color: '#555', whiteSpace: 'pre-line', marginTop: '4px' }}>{form.clientAddress}</div>
-                        )}
+                          <div className="invoice-title" style={{ margin: '10px 0', fontSize: '1.15rem' }}>
+                            PROFORMA INVOICE {PAGES > 1 && `(Page ${pageIndex + 1} of ${PAGES})`}
+                          </div>
+
+                          {/* Client details & Date - FULL ON FIRST PAGE */}
+                          {isFirstPage && (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+                              <div>
+                                <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>TO:</div>
+                                <div style={{ paddingLeft: '20px', fontSize: '0.85rem' }}>
+                                  <strong>{form.clientCompany || '_______________'}</strong>
+                                  {form.clientAddress && (
+                                    <div style={{ fontSize: '0.8rem', color: '#555', whiteSpace: 'pre-line', marginTop: '4px' }}>{form.clientAddress}</div>
+                                  )}
+                                </div>
+                              </div>
+                              <div style={{ fontSize: '0.82rem', textAlign: 'right' }}>
+                                <strong>Date: {formatDate(form.date)}</strong><br />
+                                <strong style={{ display: 'inline-block', marginTop: '6px' }}>Invoice No: {form.invoiceNo}</strong>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Subsequent pages compact reference banner */}
+                          {!isFirstPage && (
+                            <div style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center', 
+                              fontSize: '0.82rem', 
+                              color: '#333', 
+                              marginBottom: '8px', 
+                              padding: '5px 10px', 
+                              background: '#f9f9f9', 
+                              border: '1px solid #ddd', 
+                              borderRadius: '4px' 
+                            }}>
+                              <div><strong>TO:</strong> {form.clientCompany || '—'}</div>
+                              <div><strong>Invoice No:</strong> {form.invoiceNo} &nbsp;|&nbsp; <strong>Date:</strong> {formatDate(form.date)}</div>
+                            </div>
+                          )}
+
+                          {/* Table */}
+                          <table className="doc-table" style={{ marginTop: isFirstPage ? '8px' : '4px', tableLayout: 'fixed' }}>
+                            <thead>
+                              <tr>
+                                <th style={{ width: '40px', textAlign: 'center' }}>S.No</th>
+                                <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
+                                <th>Description</th>
+                                <th style={{ width: '90px', textAlign: 'center' }}>Timesheet No</th>
+                                <th style={{ width: '65px', textAlign: 'center' }}>
+                                  {(() => {
+                                    const hasHours = form.configs?.some(c => c.unitType === 'hours');
+                                    const hasShifts = form.configs?.some(c => c.unitType === 'shifts');
+                                    if (hasHours && hasShifts) return 'Shift/Hrs';
+                                    if (hasHours) return 'Hours';
+                                    return 'Shift';
+                                  })()}
+                                </th>
+                                <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
+                                <th style={{ width: '125px', textAlign: 'right' }}>Amount</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {pageRows.map((row, localIndex) => {
+                                if (row.isHeader) {
+                                  return (
+                                    <tr key={`h-${pageIndex}-${localIndex}`} style={{ background: '#f0f0f0' }}>
+                                      <td colSpan={7} style={{ textAlign: 'center', fontWeight: 700, padding: '5px', fontSize: '0.85rem' }}>
+                                        {row.config.tonType} Proforma Invoice — {row.config.unitType === 'shifts' ? 'Shift' : 'Hour'} Basis
+                                      </td>
+                                    </tr>
+                                  );
+                                }
+                                
+                                const item = row.item;
+                                return (
+                                  <tr key={`i-${pageIndex}-${localIndex}`}>
+                                    <td style={{ textAlign: 'center' }}>{row.sno}</td>
+                                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{formatDate(item.date)}</td>
+                                    <td>{item.description || '—'}</td>
+                                    <td style={{ textAlign: 'center' }}>{item.timesheetNo || '—'}</td>
+                                    <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
+                                    <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(item.rate)}</span></div></td>
+                                    <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(calcAmount(item))}</span></div></td>
+                                  </tr>
+                                );
+                              })}
+                              {isLastPage && (
+                                <tr style={{ fontWeight: 700, background: '#f9f9f9' }}>
+                                  <td colSpan={6} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
+                                  <td className="amount-col" style={{ fontWeight: 800 }}><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(grandTotal)}</span></div></td>
+                                </tr>
+                              )}
+                            </tbody>
+                          </table>
+
+                          {isLastPage && (
+                            <>
+                              <div style={{ fontSize: '0.78rem', color: '#666', marginTop: '8px', fontStyle: 'italic' }}>
+                                * For Tax Invoice, applicable GST will be charged additionally.
+                              </div>
+
+                              {/* Terms and Conditions */}
+                              {form.termsAndConditions && (
+                                <div style={{ marginTop: '10px', borderTop: '1px solid #eee', paddingTop: '6px' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '3px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
+                                  <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
+                                    {form.termsAndConditions}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Thank you & Regards + Signature */}
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '20px' }}>
+                                <div>
+                                  <h4 style={{ color: '#c8952e', fontWeight: 700, fontSize: '0.85rem' }}>Thank you &amp; Regards</h4>
+                                  <p style={{ fontWeight: 600, fontSize: '0.82rem', marginTop: '4px' }}>{companyProfile.owner}</p>
+                                  <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{companyProfile.name}</p>
+                                </div>
+                                <div style={{ textAlign: 'center', minWidth: '140px' }}>
+                                  {signature && (
+                                    <>
+                                      <img src={signature} alt="Signature" className="signature-img" />
+                                      <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                    <div style={{ fontSize: '0.82rem', textAlign: 'right' }}>
-                      <strong>Date: {formatDate(form.date)}</strong><br />
-                      <strong style={{ display: 'inline-block', marginTop: '6px' }}>Invoice No: {form.invoiceNo}</strong>
-                    </div>
-                  </div>
-                )}
+                    );
+                  });
+                })()}
+              </div>
+            </div>
+          </div>
+          <ExportButtons targetRef={previewRef} filename={form.docName || `Proforma_Invoice_${form.invoiceNo || form.clientCompany || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
+        </div>
 
-                {/* Table */}
-                <table className="doc-table" style={{ marginTop: isFirstPage ? '16px' : '8px', tableLayout: 'fixed' }}>
+        {/* === STORAGE === */}
+        {activeTab === 'storage' && (
+          <div className="doc-storage-panel fade-in" style={{ width: '100%', flex: 1 }}>
+            <div className="card">
+              <div className="card-title">Saved Proforma Invoices</div>
+              <div className="table-wrapper">
+                <table className="table">
                   <thead>
                     <tr>
-                      <th style={{ width: '40px', textAlign: 'center' }}>S.No</th>
-                      <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
-                      <th>Description</th>
-                      <th style={{ width: '90px', textAlign: 'center' }}>Timesheet No</th>
-                      <th style={{ width: '60px', textAlign: 'center' }}>Qty</th>
-                      <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
-                      <th style={{ width: '125px', textAlign: 'right' }}>Amount</th>
+                      <th>Date</th>
+                      <th>Doc Name</th>
+                      <th>Invoice No</th>
+                      <th>Client</th>
+                      <th>Amount</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {pageRows.map((row, localIndex) => {
-                      if (row.isHeader) {
-                        return (
-                          <tr key={`h-${pageIndex}-${localIndex}`} style={{ background: '#f0f0f0' }}>
-                            <td colSpan={7} style={{ textAlign: 'center', fontWeight: 700, padding: '6px', fontSize: '0.85rem' }}>
-                              {row.config.tonType} Proforma Invoice — {row.config.unitType === 'shifts' ? 'Shift' : 'Hour'} Basis
-                            </td>
-                          </tr>
-                        );
-                      }
-                      
-                      const item = row.item;
-                      return (
-                      <tr key={`i-${pageIndex}-${localIndex}`}>
-                        <td style={{ textAlign: 'center' }}>{row.sno}</td>
-                        <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{formatDate(item.date)}</td>
-                        <td>{item.description || '—'}</td>
-                        <td style={{ textAlign: 'center' }}>{item.timesheetNo || '—'}</td>
-                        <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
-                        <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(item.rate)}</span></div></td>
-                        <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(calcAmount(item))}</span></div></td>
+                    {savedProformas.map(pf => (
+                      <tr key={pf.id}>
+                        <td>{formatDate(pf.date)}</td>
+                        <td><strong>{pf.docName}</strong></td>
+                        <td>{pf.invoiceNo}</td>
+                        <td>{pf.clientCompany}</td>
+                        <td>₹{formatCurrency(pf.grandTotal)}</td>
+                        <td>
+                          <div style={{ display: 'flex', gap: '6px' }}>
+                            <button className="btn btn-sm btn-secondary" onClick={() => loadProforma(pf)}>Edit / View</button>
+                            <button className="btn btn-sm btn-danger" onClick={() => handleDelete(pf.id)}><Trash2 size={14}/></button>
+                          </div>
+                        </td>
                       </tr>
-                    )})}
-                    {isLastPage && (
-                      <tr style={{ fontWeight: 700, background: '#f9f9f9' }}>
-                        <td colSpan={6} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
-                        <td className="amount-col" style={{ fontWeight: 800 }}><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(grandTotal)}</span></div></td>
-                      </tr>
+                    ))}
+                    {savedProformas.length === 0 && (
+                      <tr><td colSpan="6" style={{ textAlign: 'center', padding: '24px' }}>No saved proforma invoices found.</td></tr>
                     )}
                   </tbody>
                 </table>
-
-                {isLastPage && (
-                  <>
-                    <div style={{ fontSize: '0.78rem', color: '#666', marginTop: '8px', fontStyle: 'italic' }}>
-                      * For Tax Invoice, applicable GST will be charged additionally.
-                    </div>
-
-                    {/* Terms and Conditions */}
-                    {form.termsAndConditions && (
-                      <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                        <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
-                        <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
-                          {form.termsAndConditions}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Thank you & Regards + Signature */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '24px' }}>
-                      <div>
-                        <h4 style={{ color: '#c8952e', fontWeight: 700, fontSize: '0.85rem' }}>Thank you &amp; Regards</h4>
-                        <p style={{ fontWeight: 600, fontSize: '0.82rem', marginTop: '6px' }}>{companyProfile.owner}</p>
-                        <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{companyProfile.name}</p>
-                      </div>
-                      <div style={{ textAlign: 'center', minWidth: '140px' }}>
-                        {signature && (
-                          <>
-                            <img src={signature} alt="Signature" className="signature-img" />
-                            <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', borderTop: '1px solid #aaa', paddingTop: '4px', minWidth: '140px' }}>SIGNATURE</div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
               </div>
-            </div>
-              );
-              })})()}
             </div>
           </div>
-          <ExportButtons targetRef={previewRef} filename={form.docName || `Proforma_Invoice_${form.clientCompany || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
-        </div>
-
-          {/* === STORAGE === */}
-          {activeTab === 'storage' && (
-            <div className="doc-storage-panel fade-in" style={{ width: '100%', flex: 1 }}>
-              <div className="card">
-                <div className="card-title">Saved Proforma Invoices</div>
-                <div className="table-wrapper">
-                  <table className="table">
-                    <thead>
-                      <tr>
-                        <th>Date</th>
-                        <th>Doc Name</th>
-                        <th>Invoice No</th>
-                        <th>Client</th>
-                        <th>Amount</th>
-                        <th>Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {savedProformas.map(pf => (
-                        <tr key={pf.id}>
-                          <td>{formatDate(pf.date)}</td>
-                          <td><strong>{pf.docName}</strong></td>
-                          <td>{pf.invoiceNo}</td>
-                          <td>{pf.clientCompany}</td>
-                          <td>₹{formatCurrency(pf.grandTotal)}</td>
-                          <td>
-                            <div style={{ display: 'flex', gap: '6px' }}>
-                              <button className="btn btn-sm btn-secondary" onClick={() => loadProforma(pf)}>Edit / View</button>
-                              <button className="btn btn-sm btn-danger" onClick={() => handleDelete(pf.id)}><Trash2 size={14}/></button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                      {savedProformas.length === 0 && (
-                        <tr><td colSpan="6" style={{ textAlign: 'center', padding: '24px' }}>No saved proforma invoices found.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <style>{`
-        `}</style>
+        )}
       </div>
     </>
   );

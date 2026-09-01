@@ -1591,14 +1591,14 @@ select.form-control {
   .doc-preview {
     width: 210mm !important; /* Standard A4 width */
     max-width: 210mm !important;
-    min-height: auto !important; /* Don't force full page height — let content dictate */
+    min-height: 297mm !important;
     margin: 0 auto !important;
     background: white !important;
     box-shadow: none !important;
     border: none !important;
     outline: none !important;
-    page-break-after: auto !important; /* Only break if content overflows */
-    break-after: auto !important;
+    page-break-after: always !important;
+    break-after: page !important;
     page-break-inside: avoid !important;
     break-inside: avoid !important;
     visibility: visible !important;
@@ -1606,6 +1606,12 @@ select.form-control {
     position: relative !important;
     box-sizing: border-box !important;
     border-radius: 0 !important;
+  }
+
+  .doc-preview:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+    min-height: auto !important;
   }
 
   .doc-preview-inner {

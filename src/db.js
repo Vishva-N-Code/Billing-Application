@@ -314,6 +314,67 @@ export async function updateInvoiceCounter(newNumberStr) {
   }
 }
 
+export async function getNextProformaInvoiceNumber(companyName) {
+  const cleanName = (companyName || '').trim();
+  const firstLetterMatch = cleanName.match(/[a-zA-Z]/);
+  const defaultPrefix = firstLetterMatch ? firstLetterMatch[0].toUpperCase() : 'P';
+  
+  let prefix = defaultPrefix;
+  let maxNum = 0;
+  let padLen = 3;
+  let separator = '';
+
+  try {
+    const allProformas = await db.proformaInvoices.toArray();
+    if (Array.isArray(allProformas)) {
+      // 1. Look for existing proformas matching this specific company name
+      const matchingCompanyProformas = cleanName 
+        ? allProformas.filter(p => p.clientCompany && p.clientCompany.trim().toLowerCase() === cleanName.toLowerCase())
+        : [];
+
+      for (const p of matchingCompanyProformas) {
+        const rawNo = p.invoiceNo || p.data?.form?.invoiceNo;
+        if (rawNo && typeof rawNo === 'string') {
+          const match = rawNo.trim().match(/^([a-zA-Z]+)([-/_]?\s*)(\d+)$/);
+          if (match) {
+            prefix = match[1].toUpperCase();
+            separator = match[2] || '';
+            const num = parseInt(match[3], 10);
+            if (num > maxNum) {
+              maxNum = num;
+              padLen = Math.max(padLen, match[3].length);
+            }
+          }
+        }
+      }
+
+      // 2. If no numbers found for this exact company, check all proformas starting with this prefix
+      if (maxNum === 0) {
+        for (const p of allProformas) {
+          const rawNo = p.invoiceNo || p.data?.form?.invoiceNo;
+          if (rawNo && typeof rawNo === 'string') {
+            const match = rawNo.trim().match(/^([a-zA-Z]+)([-/_]?\s*)(\d+)$/);
+            if (match && match[1].toUpperCase() === defaultPrefix) {
+              separator = match[2] || '';
+              const num = parseInt(match[3], 10);
+              if (num > maxNum) {
+                maxNum = num;
+                padLen = Math.max(padLen, match[3].length);
+              }
+            }
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error in getNextProformaInvoiceNumber:', err);
+  }
+
+  const nextNum = maxNum + 1;
+  return `${prefix}${separator}${String(nextNum).padStart(padLen, '0')}`;
+}
+
+
 export const COLUMN_MAP = {
   companyName: 'company_name',
   invoiceNo: 'invoice_no',
