@@ -29,6 +29,9 @@ export default function Quotation({ exportItem }) {
 
   const [signature, setSignature] = useState(null);
   const [companyProfile, setCompanyProfile] = useState(COMPANY);
+  const [customers, setCustomers] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   const addItem = () => setItems([...items, { description: '', quantity: '', rate: '', price: '' }]);
 
@@ -86,6 +89,8 @@ export default function Quotation({ exportItem }) {
       }
 
       await initSettings();
+      const allCust = await db.customers.toArray();
+      setCustomers(allCust);
       fetchSaved();
       
       const profile = await getCompanyProfile();
@@ -94,8 +99,10 @@ export default function Quotation({ exportItem }) {
     };
     init();
 
-    const handleSyncComplete = () => {
+    const handleSyncComplete = async () => {
       fetchSaved();
+      const allCust = await db.customers.toArray();
+      setCustomers(allCust);
     };
     window.addEventListener('sync-complete', handleSyncComplete);
     return () => {
@@ -115,6 +122,30 @@ export default function Quotation({ exportItem }) {
       await deleteQuotation(id);
       await fetchSaved();
     }
+  };
+
+  const handleCompanySearch = (val) => {
+    setForm(f => ({ ...f, toCompany: val }));
+    if (val.length >= 2) {
+      const matches = customers.filter(c => {
+        const name = (c.companyName || c.company_name || '').toLowerCase();
+        return name.includes(val.toLowerCase());
+      });
+      setSuggestions(matches);
+      setShowSuggestions(matches.length > 0);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  };
+
+  const selectCustomer = (customer) => {
+    setForm(f => ({
+      ...f,
+      toCompany: customer.companyName || customer.company_name || '',
+      toAddress: customer.address || '',
+    }));
+    setShowSuggestions(false);
   };
 
   const handleSaveOnly = async () => {
@@ -164,6 +195,51 @@ export default function Quotation({ exportItem }) {
     return num.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.price) || calcAmount(item) || 0), 0);
+
+  // Dynamic pagination partitioning for Quotations
+  const paginateQuotationItems = (allItems) => {
+    const total = allItems.length;
+    // 1-page document if 6 or fewer items with full header and full footer
+    if (total <= 6) {
+      return [allItems];
+    }
+
+    const pages = [];
+    let offset = 0;
+
+    while (offset < total) {
+      const isFirst = pages.length === 0;
+      const remaining = total - offset;
+
+      if (isFirst) {
+        // If remaining is <= 14, balance between Page 1 and Page 2
+        if (remaining <= 14) {
+          const take = Math.max(Math.ceil(remaining / 2), remaining - 7);
+          pages.push(allItems.slice(offset, offset + take));
+          offset += take;
+        } else {
+          // Page 1 takes up to 14 items
+          const take = Math.min(14, remaining);
+          pages.push(allItems.slice(offset, offset + take));
+          offset += take;
+        }
+      } else {
+        // If remaining items fit comfortably on the last page with footer (<= 8 items)
+        if (remaining <= 8) {
+          pages.push(allItems.slice(offset));
+          offset = total;
+        } else {
+          // Middle page: take up to 16 items, leaving at least 2 items for the last page
+          const take = Math.min(remaining - 2, 16);
+          pages.push(allItems.slice(offset, offset + take));
+          offset += take;
+        }
+      }
+    }
+    return pages;
+  };
+
   return (
     <>
       <div className="page-header">
@@ -195,10 +271,26 @@ export default function Quotation({ exportItem }) {
                 <input className="form-control" placeholder="e.g. Mr. John Doe"
                   value={form.personInCharge} onChange={e => setForm({ ...form, personInCharge: e.target.value })} />
               </div>
-              <div className="form-group">
+              <div className="form-group autocomplete-wrapper">
                 <label>To (Company Name)</label>
-                <input className="form-control" placeholder="Client company name"
-                  value={form.toCompany} onChange={e => setForm({ ...form, toCompany: e.target.value })} />
+                <input 
+                  className="form-control" 
+                  placeholder="Client company name"
+                  value={form.toCompany} 
+                  onChange={e => handleCompanySearch(e.target.value)}
+                  onFocus={() => form.toCompany.length >= 2 && handleCompanySearch(form.toCompany)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+                />
+                {showSuggestions && suggestions.length > 0 && (
+                  <div className="autocomplete-dropdown">
+                    {suggestions.map(c => (
+                      <div key={c.id} className="autocomplete-item" onMouseDown={() => selectCustomer(c)}>
+                        <div className="company-name">{c.companyName || c.company_name}</div>
+                        <div className="gstin-text">{c.gstin ? `${c.gstin} | ` : ''}{c.address}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="form-group">
                 <label>Address</label>
@@ -300,13 +392,15 @@ export default function Quotation({ exportItem }) {
             <div className="doc-preview-container">
               <div ref={previewRef} className="print-capture-wrap">
                 {(() => {
-                  const itemsPerPage = 15;
-                  const totalPages = Math.ceil(Math.max(1, items.length) / itemsPerPage);
+                  const pages = paginateQuotationItems(items);
+                  const totalPages = pages.length;
+                  let globalItemIndex = 0;
                   
-                  return Array.from({ length: totalPages }, (_, pageIndex) => {
-                    const pageItems = items.slice(pageIndex * itemsPerPage, (pageIndex + 1) * itemsPerPage);
+                  return pages.map((pageItems, pageIndex) => {
                     const isFirstPage = pageIndex === 0;
                     const isLastPage = pageIndex === totalPages - 1;
+                    const pageStartOffset = globalItemIndex;
+                    globalItemIndex += pageItems.length;
 
                     return (
                       <div key={pageIndex} className="doc-preview">
@@ -326,20 +420,20 @@ export default function Quotation({ exportItem }) {
                             </div>
                           </div>
 
-                          <hr className="doc-divider" />
+                          <div style={{ height: '2px', background: '#c8952e', margin: '8px 0', width: '100%' }}></div>
 
                           {/* QUOTATION title */}
-                          <div className="invoice-title">
-                            QUOTATION {totalPages > 1 && `(Page ${pageIndex + 1})`}
+                          <div className="invoice-title" style={{ margin: '10px 0', fontSize: '1.15rem' }}>
+                            QUOTATION {totalPages > 1 && `(Page ${pageIndex + 1} of ${totalPages})`}
                           </div>
 
-                          {/* To & Date - ONLY ON FIRST PAGE */}
+                          {/* To & Date - FULL ON FIRST PAGE */}
                           {isFirstPage && (
                             <>
-                              <div className="quote-to-section">
+                              <div className="quote-to-section" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px' }}>
                                 <div>
-                                  <div style={{ fontWeight: 700, fontSize: '0.82rem' }}>TO:</div>
-                                  <div style={{ paddingLeft: '20px', fontSize: '0.82rem' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.85rem' }}>TO:</div>
+                                  <div style={{ paddingLeft: '20px', fontSize: '0.85rem' }}>
                                     {form.personInCharge && <div style={{ fontWeight: 600, marginBottom: '2px' }}>{form.personInCharge}</div>}
                                     <strong>{form.toCompany || '_______________'}</strong>
                                     <br />
@@ -348,20 +442,41 @@ export default function Quotation({ exportItem }) {
                                     ))}
                                   </div>
                                 </div>
-                                <div style={{ fontSize: '0.82rem' }}>
+                                <div style={{ fontSize: '0.85rem', textAlign: 'right' }}>
                                   <strong>Date: {formatDate(form.date)}</strong>
                                 </div>
                               </div>
                               <hr className="doc-divider-thin" />
                               {/* Intro */}
                               {form.introText && (
-                                <div className="quote-intro">{form.introText}</div>
+                                <div className="quote-intro" style={{ fontSize: '0.85rem', fontStyle: 'italic', margin: '6px 0 10px 0' }}>
+                                  {form.introText}
+                                </div>
                               )}
                             </>
                           )}
 
+                          {/* Subsequent pages compact reference banner */}
+                          {!isFirstPage && (
+                            <div style={{ 
+                              display: 'flex', 
+                              justifyContent: 'space-between', 
+                              alignItems: 'center', 
+                              fontSize: '0.82rem', 
+                              color: '#333', 
+                              marginBottom: '8px', 
+                              padding: '5px 10px', 
+                              background: '#f9f9f9', 
+                              border: '1px solid #ddd', 
+                              borderRadius: '4px' 
+                            }}>
+                              <div><strong>TO:</strong> {form.toCompany || '—'} {form.personInCharge ? `(Attn: ${form.personInCharge})` : ''}</div>
+                              <div><strong>Date:</strong> {formatDate(form.date)}</div>
+                            </div>
+                          )}
+
                           {/* Items Table - Sliced for current page */}
-                          <table className="doc-table" style={{ tableLayout: 'fixed', width: '100%' }}>
+                          <table className="doc-table" style={{ tableLayout: 'fixed', width: '100%', marginTop: isFirstPage ? '8px' : '4px' }}>
                             <thead>
                               <tr>
                                 <th style={{ width: '45px', textAlign: 'center' }}>S.No</th>
@@ -376,7 +491,7 @@ export default function Quotation({ exportItem }) {
                                 const amount = item.price || calcAmount(item);
                                 return (
                                   <tr key={i}>
-                                    <td style={{ textAlign: 'center' }}>{pageIndex * itemsPerPage + i + 1}</td>
+                                    <td style={{ textAlign: 'center' }}>{pageStartOffset + i + 1}</td>
                                     <td>{item.description || '—'}</td>
                                     <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
                                     <td className="amount-col" style={{ padding: '8px 10px', boxSizing: 'border-box', whiteSpace: 'nowrap' }}>
@@ -398,6 +513,17 @@ export default function Quotation({ exportItem }) {
                                   </tr>
                                 );
                               })}
+                              {isLastPage && totalAmount > 0 && (
+                                <tr style={{ fontWeight: 700, background: '#f9f9f9' }}>
+                                  <td colSpan={4} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
+                                  <td className="amount-col" style={{ fontWeight: 800 }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
+                                      <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 700 }}>Rs.</span>
+                                      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>{formatCurrency(totalAmount)}</span>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
                             </tbody>
                           </table>
 
@@ -409,8 +535,8 @@ export default function Quotation({ exportItem }) {
                               {/* Notes */}
                               {form.notes.length > 0 && (
                                 <div className="quote-note">
-                                  <h4>NOTE:</h4>
-                                  <ul style={{ paddingLeft: '20px', margin: 0 }}>
+                                  <h4 style={{ fontSize: '0.82rem', fontWeight: 700, marginBottom: '3px' }}>NOTE:</h4>
+                                  <ul style={{ paddingLeft: '20px', margin: 0, fontSize: '0.8rem' }}>
                                     {form.notes.filter(n => n).map((n, i) => (
                                       <li key={i} style={{ fontWeight: 600 }}>{n}</li>
                                     ))}
@@ -420,8 +546,8 @@ export default function Quotation({ exportItem }) {
 
                               {/* Terms and Conditions */}
                               {form.termsAndConditions && (
-                                <div style={{ marginTop: '16px', borderTop: '1px solid #eee', paddingTop: '8px' }}>
-                                  <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '4px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
+                                <div style={{ marginTop: '12px', borderTop: '1px solid #eee', paddingTop: '6px' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.8rem', marginBottom: '3px', textDecoration: 'underline' }}>TERMS & CONDITIONS:</div>
                                   <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
                                     {form.termsAndConditions}
                                   </div>
@@ -431,16 +557,16 @@ export default function Quotation({ exportItem }) {
                               <hr className="doc-divider-thin" />
 
                               {/* Closing */}
-                              <div className="quote-closing">
+                              <div className="quote-closing" style={{ fontSize: '0.82rem', fontStyle: 'italic', margin: '8px 0' }}>
                                 Kindly Consider our lowest Quotation for your valuable work
                               </div>
 
                               {/* Regards & Signature */}
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '16px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: '14px' }}>
                                 <div className="quote-regards">
-                                  <h4 style={{ color: '#c8952e', fontWeight: 700 }}>Thank you &amp; Regards</h4>
-                                  <p style={{ marginTop: '6px', fontWeight: 600 }}>{companyProfile.owner}</p>
-                                  <p style={{ fontWeight: 700 }}>{companyProfile.name}</p>
+                                  <h4 style={{ color: '#c8952e', fontWeight: 700, fontSize: '0.85rem' }}>Thank you &amp; Regards</h4>
+                                  <p style={{ marginTop: '4px', fontWeight: 600, fontSize: '0.82rem' }}>{companyProfile.owner}</p>
+                                  <p style={{ fontWeight: 700, fontSize: '0.82rem' }}>{companyProfile.name}</p>
                                 </div>
                                 <div style={{ textAlign: 'center', minWidth: '140px' }}>
                                   {signature && (
