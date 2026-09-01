@@ -197,46 +197,66 @@ export default function Quotation({ exportItem }) {
 
   const totalAmount = items.reduce((sum, item) => sum + (parseFloat(item.price) || calcAmount(item) || 0), 0);
 
-  // Dynamic pagination partitioning for Quotations
+  // Dynamic line-weight aware pagination partitioning for Quotations
   const paginateQuotationItems = (allItems) => {
-    const total = allItems.length;
-    // 1-page document if 6 or fewer items with full header and full footer
-    if (total <= 6) {
+    if (!allItems || allItems.length === 0) return [[]];
+
+    const getItemWeight = (item) => {
+      if (!item) return 1;
+      const desc = item.description || '';
+      const lines = desc.split('\n').filter(Boolean).length || 1;
+      const charLines = Math.ceil(desc.length / 42) || 1;
+      return Math.max(1, Math.max(lines, charLines));
+    };
+
+    const totalWeight = allItems.reduce((sum, item) => sum + getItemWeight(item), 0);
+
+    // If total weight fits on single page with full header and full footer
+    if (totalWeight <= 7 && allItems.length <= 6) {
       return [allItems];
     }
 
     const pages = [];
-    let offset = 0;
+    let currentIndex = 0;
 
-    while (offset < total) {
+    while (currentIndex < allItems.length) {
       const isFirst = pages.length === 0;
-      const remaining = total - offset;
+      const remainingItems = allItems.slice(currentIndex);
+      const remainingWeight = remainingItems.reduce((sum, item) => sum + getItemWeight(item), 0);
 
-      if (isFirst) {
-        // If remaining is <= 14, balance between Page 1 and Page 2
-        if (remaining <= 14) {
-          const take = Math.max(Math.ceil(remaining / 2), remaining - 7);
-          pages.push(allItems.slice(offset, offset + take));
-          offset += take;
-        } else {
-          // Page 1 takes up to 14 items
-          const take = Math.min(14, remaining);
-          pages.push(allItems.slice(offset, offset + take));
-          offset += take;
-        }
-      } else {
-        // If remaining items fit comfortably on the last page with footer (<= 8 items)
-        if (remaining <= 8) {
-          pages.push(allItems.slice(offset));
-          offset = total;
-        } else {
-          // Middle page: take up to 16 items, leaving at least 2 items for the last page
-          const take = Math.min(remaining - 2, 16);
-          pages.push(allItems.slice(offset, offset + take));
-          offset += take;
-        }
+      // Check if all remaining items can fit on the last page with footer
+      if (!isFirst && remainingWeight <= 8) {
+        pages.push(remainingItems);
+        break;
       }
+
+      const maxWeightForThisPage = isFirst ? 12 : 16;
+      let pageItems = [];
+      let currentWeight = 0;
+
+      for (let i = currentIndex; i < allItems.length; i++) {
+        const item = allItems[i];
+        const w = getItemWeight(item);
+
+        // If adding this item exceeds page weight and we already have at least 1 item
+        if (pageItems.length > 0 && (currentWeight + w > maxWeightForThisPage)) {
+          break;
+        }
+
+        // Also avoid leaving only 1 tiny item on the subsequent last page
+        const afterThisRemainingWeight = allItems.slice(i + 1).reduce((s, it) => s + getItemWeight(it), 0);
+        if (pageItems.length >= 3 && afterThisRemainingWeight > 0 && afterThisRemainingWeight <= 2) {
+          break;
+        }
+
+        pageItems.push(item);
+        currentWeight += w;
+      }
+
+      pages.push(pageItems);
+      currentIndex += pageItems.length;
     }
+
     return pages;
   };
 
