@@ -210,6 +210,23 @@ export default function DeliveryChellan({ exportItem }) {
       }));
     };
     init();
+
+    const handleSyncComplete = async () => {
+      await fetchSaved();
+      await loadVehicleSections();
+      const { db: database } = await import('../db');
+      const allCustomers = await database.customers.toArray();
+      setCustomers(allCustomers);
+      
+      const num = await getNextDcNumber();
+      const formattedNum = `OSC${String(num).padStart(4, '0')}`;
+      setForm(curr => (!curr.id ? { ...curr, dcNo: formattedNum } : curr));
+    };
+
+    window.addEventListener('sync-complete', handleSyncComplete);
+    return () => {
+      window.removeEventListener('sync-complete', handleSyncComplete);
+    };
   }, [location.state, exportItem]);
 
   const loadDc = (dc) => {

@@ -30,10 +30,11 @@ export default function ProformaInvoice({ exportItem }) {
     date: new Date().toISOString().split('T')[0],
     clientCompany: '',
     clientAddress: '',
+    showParty: false,
     configs: [{
       tonType: '3 Ton',
       unitType: 'shifts',
-      items: [{ date: '', description: '', timesheetNo: '', quantity: '', rate: '' }]
+      items: [{ date: '', party: '', description: '', timesheetNo: '', quantity: '', rate: '' }]
     }],
     termsAndConditions: '',
   });
@@ -51,8 +52,14 @@ export default function ProformaInvoice({ exportItem }) {
       const itemToLoad = exportItem || location.state?.loadItem;
       if (itemToLoad) {
         const pf = itemToLoad;
-        setForm({ ...pf.data.form, id: pf.id });
-        if (pf.data.signature) setSignature(pf.data.signature);
+        const loadedForm = pf.data?.form || {};
+        const hasPartyInItems = loadedForm.configs?.some(c => c.items?.some(i => i.party && i.party.trim().length > 0));
+        setForm({
+          ...loadedForm,
+          id: pf.id,
+          showParty: loadedForm.showParty !== undefined ? loadedForm.showParty : (hasPartyInItems || false)
+        });
+        if (pf.data?.signature) setSignature(pf.data.signature);
         setActiveTab('preview');
         
         const profile = await getCompanyProfile();
@@ -81,8 +88,14 @@ export default function ProformaInvoice({ exportItem }) {
   }, [location.state, exportItem]);
 
   const loadProforma = (pf) => {
-    setForm({ ...pf.data.form, id: pf.id });
-    if (pf.data.signature) setSignature(pf.data.signature);
+    const loadedForm = pf.data?.form || {};
+    const hasPartyInItems = loadedForm.configs?.some(c => c.items?.some(i => i.party && i.party.trim().length > 0));
+    setForm({
+      ...loadedForm,
+      id: pf.id,
+      showParty: loadedForm.showParty !== undefined ? loadedForm.showParty : (hasPartyInItems || false)
+    });
+    if (pf.data?.signature) setSignature(pf.data.signature);
     setActiveTab('preview');
   };
 
@@ -128,7 +141,7 @@ export default function ProformaInvoice({ exportItem }) {
 
   const addItem = (cfgIndex) => {
     const newConfigs = [...form.configs];
-    newConfigs[cfgIndex].items.push({ date: '', description: '', timesheetNo: '', quantity: '', rate: '' });
+    newConfigs[cfgIndex].items.push({ date: '', party: '', description: '', timesheetNo: '', quantity: '', rate: '' });
     setForm({ ...form, configs: newConfigs });
   };
 
@@ -321,7 +334,29 @@ export default function ProformaInvoice({ exportItem }) {
             </div>
 
             <div className="card" style={{ marginBottom: '16px' }}>
-              <div className="card-title">Invoice Configuration & Items</div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                <div className="card-title" style={{ margin: 0 }}>Invoice Configuration &amp; Items</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', background: 'var(--bg-input)', padding: '6px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                  <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>Display in Preview:</span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', cursor: 'pointer', userSelect: 'none', color: 'var(--text-primary)', fontWeight: 500 }}>
+                    <input 
+                      type="checkbox" 
+                      checked={!!form.showParty} 
+                      onChange={e => setForm({ ...form, showParty: e.target.checked })} 
+                      style={{ accentColor: 'var(--accent-gold)' }} 
+                    />
+                    Party Column
+                  </label>
+                </div>
+              </div>
+
+              {/* Datalist for party autocompletion / suggestions */}
+              <datalist id="customerPartyList">
+                {customers.map(c => (
+                  <option key={c.id} value={c.companyName || c.company_name} />
+                ))}
+              </datalist>
+
               {form.configs?.map((config, cfgIdx) => (
                 <div key={cfgIdx} style={{ marginBottom: '24px', paddingBottom: '16px', borderBottom: cfgIdx < form.configs.length - 1 ? '1px dashed #ccc' : 'none' }}>
                   <div className="form-row form-row-2" style={{ marginBottom: '12px', alignItems: 'flex-end', display: 'flex', gap: '16px' }}>
@@ -382,10 +417,11 @@ export default function ProformaInvoice({ exportItem }) {
                         <tr>
                           <th style={{ width: '40px' }}>S.No</th>
                           <th style={{ width: '120px' }}>Date</th>
+                          <th style={{ width: '130px' }}>Party</th>
                           <th>Description</th>
-                          <th>Timesheet No</th>
-                          <th style={{ width: '100px' }}>{config.unitType === 'shifts' ? 'Shifts' : 'Hours'}</th>
-                          <th style={{ width: '140px' }}>Rate</th>
+                          <th style={{ width: '110px' }}>Timesheet No</th>
+                          <th style={{ width: '90px' }}>{config.unitType === 'shifts' ? 'Shifts' : 'Hours'}</th>
+                          <th style={{ width: '130px' }}>Rate</th>
                           <th style={{ width: '100px' }}>Amount</th>
                           <th style={{ width: '40px' }}></th>
                         </tr>
@@ -396,6 +432,15 @@ export default function ProformaInvoice({ exportItem }) {
                             <td>{itemIdx + 1}</td>
                             <td>
                               <CustomDateInput className="form-control" value={item.date} onChange={val => updateItem(cfgIdx, itemIdx, 'date', val)} />
+                            </td>
+                            <td>
+                              <input 
+                                className="form-control" 
+                                placeholder="Party (Optional)" 
+                                list="customerPartyList"
+                                value={item.party || ''} 
+                                onChange={e => updateItem(cfgIdx, itemIdx, 'party', e.target.value)} 
+                              />
                             </td>
                             <td>
                               <textarea className="form-control" placeholder="Description" rows={2}
@@ -442,7 +487,7 @@ export default function ProformaInvoice({ exportItem }) {
                     configs: [...form.configs, { 
                       tonType: '3 Ton', 
                       unitType: 'shifts', 
-                      items: [{ date: '', description: '', timesheetNo: '', quantity: '', rate: '' }] 
+                      items: [{ date: '', party: '', description: '', timesheetNo: '', quantity: '', rate: '' }] 
                     }] 
                   });
                 }}>
@@ -481,6 +526,9 @@ export default function ProformaInvoice({ exportItem }) {
 
                   const paginatedPages = paginateProformaRows(printRows);
                   const PAGES = paginatedPages.length;
+                  const showParty = !!form.showParty;
+                  const colCount = showParty ? 8 : 7;
+                  const totalLabelColSpan = colCount - 1;
                   
                   return paginatedPages.map((pageRows, pageIndex) => {
                     const isFirstPage = pageIndex === 0;
@@ -549,14 +597,15 @@ export default function ProformaInvoice({ exportItem }) {
                           )}
 
                           {/* Table */}
-                          <table className="doc-table" style={{ marginTop: isFirstPage ? '8px' : '4px', tableLayout: 'fixed' }}>
+                          <table className="doc-table" style={{ marginTop: isFirstPage ? '8px' : '4px', tableLayout: 'fixed', width: '100%' }}>
                             <thead>
                               <tr>
-                                <th style={{ width: '40px', textAlign: 'center' }}>S.No</th>
-                                <th style={{ width: '90px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
-                                <th>Description</th>
-                                <th style={{ width: '90px', textAlign: 'center' }}>Timesheet No</th>
-                                <th style={{ width: '65px', textAlign: 'center' }}>
+                                <th style={{ width: '38px', textAlign: 'center' }}>S.No</th>
+                                <th style={{ width: '82px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
+                                {showParty && <th style={{ width: '105px', textAlign: 'left' }}>Party</th>}
+                                <th style={{ textAlign: 'left' }}>Description</th>
+                                <th style={{ width: '85px', textAlign: 'center' }}>Timesheet No</th>
+                                <th style={{ width: '60px', textAlign: 'center' }}>
                                   {(() => {
                                     const hasHours = form.configs?.some(c => c.unitType === 'hours');
                                     const hasShifts = form.configs?.some(c => c.unitType === 'shifts');
@@ -565,8 +614,8 @@ export default function ProformaInvoice({ exportItem }) {
                                     return 'Shift';
                                   })()}
                                 </th>
-                                <th style={{ width: '100px', textAlign: 'right' }}>Rate</th>
-                                <th style={{ width: '125px', textAlign: 'right' }}>Amount</th>
+                                <th style={{ width: '95px', textAlign: 'right' }}>Rate</th>
+                                <th style={{ width: '120px', textAlign: 'right' }}>Amount</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -574,7 +623,7 @@ export default function ProformaInvoice({ exportItem }) {
                                 if (row.isHeader) {
                                   return (
                                     <tr key={`h-${pageIndex}-${localIndex}`} style={{ background: '#f0f0f0' }}>
-                                      <td colSpan={7} style={{ textAlign: 'center', fontWeight: 700, padding: '5px', fontSize: '0.85rem' }}>
+                                      <td colSpan={colCount} style={{ textAlign: 'center', fontWeight: 700, padding: '5px', fontSize: '0.85rem' }}>
                                         {row.config.tonType} Proforma Invoice — {row.config.unitType === 'shifts' ? 'Shift' : 'Hour'} Basis
                                       </td>
                                     </tr>
@@ -586,7 +635,8 @@ export default function ProformaInvoice({ exportItem }) {
                                   <tr key={`i-${pageIndex}-${localIndex}`}>
                                     <td style={{ textAlign: 'center' }}>{row.sno}</td>
                                     <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{formatDate(item.date)}</td>
-                                    <td>{item.description || '—'}</td>
+                                    {showParty && <td style={{ textAlign: 'left', wordBreak: 'break-word' }}>{item.party || '—'}</td>}
+                                    <td style={{ textAlign: 'left', wordBreak: 'break-word' }}>{item.description || '—'}</td>
                                     <td style={{ textAlign: 'center' }}>{item.timesheetNo || '—'}</td>
                                     <td style={{ textAlign: 'center' }}>{item.quantity || '—'}</td>
                                     <td className="amount-col"><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(item.rate)}</span></div></td>
@@ -596,7 +646,7 @@ export default function ProformaInvoice({ exportItem }) {
                               })}
                               {isLastPage && (
                                 <tr style={{ fontWeight: 700, background: '#f9f9f9' }}>
-                                  <td colSpan={6} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
+                                  <td colSpan={totalLabelColSpan} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
                                   <td className="amount-col" style={{ fontWeight: 800 }}><div style={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}><span>Rs.</span> <span>{formatCurrency(grandTotal)}</span></div></td>
                                 </tr>
                               )}

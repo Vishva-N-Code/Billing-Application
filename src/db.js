@@ -189,7 +189,7 @@ export async function initSettings() {
         }
       }
 
-      if (missingSeedInvoices.length > 0 || missingSeedBills.length > 0 || missingSeedCusts.length > 0) {
+      if (missingSeedInvoices.length > 0 || missingSeedBills.length > 0 || missingSeedCusts.length > 0 || (missingDcs && missingDcs.length > 0)) {
         notifyLocalChange();
       }
     } catch (seedErr) {
@@ -738,6 +738,9 @@ export async function deleteCashBill(id) {
 
 export async function saveDc(data) { 
   const id = await db.deliveryChellans.add(data); 
+  if (data && data.dcNo) {
+    await updateDcCounter(data.dcNo);
+  }
   notifyLocalChange();
   pushToCloud('delivery_chellans', data); 
   return id; 
@@ -745,6 +748,9 @@ export async function saveDc(data) {
 export async function updateDc(id, data) { 
   const numericId = Number(id); 
   await db.deliveryChellans.update(numericId, data); 
+  if (data && data.dcNo) {
+    await updateDcCounter(data.dcNo);
+  }
   notifyLocalChange();
   pushToCloud('delivery_chellans', data); 
 }
@@ -822,8 +828,52 @@ export async function deleteExperienceCertificate(id) {
 
 export async function getNextCashBillNumber() { const counter = await db.settings.get('cashBillCounter'); return String(counter ? counter.value : 1).padStart(3, '0'); }
 export async function updateCashBillCounter(n) { const num = parseInt(n); if (!isNaN(num)) await db.settings.put({ key: 'cashBillCounter', value: num + 1 }); }
-export async function getNextDcNumber() { const counter = await db.settings.get('dcCounter'); return String(counter ? counter.value : 1).padStart(3, '0'); }
-export async function updateDcCounter(n) { const num = parseInt(n); if (!isNaN(num)) await db.settings.put({ key: 'dcCounter', value: num + 1 }); }
+export async function getNextDcNumber() {
+  let maxInDb = 0;
+  let maxPadLength = 3;
+  try {
+    const allDcs = await db.deliveryChellans.toArray();
+    if (Array.isArray(allDcs)) {
+      for (const dc of allDcs) {
+        const rawNo = dc.dcNo || dc.data?.form?.dcNo;
+        if (rawNo) {
+          const num = extractInvoiceNumber(rawNo);
+          if (num > maxInDb) {
+            maxInDb = num;
+          }
+          const digits = String(rawNo).replace(/\D/g, '');
+          if (digits.length > maxPadLength) {
+            maxPadLength = digits.length;
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error reading db.deliveryChellans in getNextDcNumber:', err);
+  }
+
+  const counterSetting = await db.settings.get('dcCounter');
+  const counterVal = counterSetting ? Number(counterSetting.value) || 0 : 0;
+  const nextNum = Math.max(maxInDb + 1, counterVal);
+
+  try {
+    await db.settings.put({ key: 'dcCounter', value: nextNum });
+  } catch (err) {
+    console.warn('Failed to update dcCounter setting:', err);
+  }
+
+  return String(nextNum).padStart(maxPadLength, '0');
+}
+
+export async function updateDcCounter(newNumberStr) {
+  const num = extractInvoiceNumber(newNumberStr);
+  if (num > 0) {
+    const counterSetting = await db.settings.get('dcCounter');
+    const currentVal = counterSetting ? Number(counterSetting.value) || 0 : 0;
+    const targetVal = Math.max(num + 1, currentVal);
+    await db.settings.put({ key: 'dcCounter', value: targetVal });
+  }
+}
 
 export async function getAllMediaItems() { return (await db.mediaLibrary.toArray()).sort((a,b) => new Date(b.uploadedAt) - new Date(a.uploadedAt)); }
 export async function saveMediaItem(data) { const id = await db.mediaLibrary.add(data); notifyLocalChange(); pushToCloud('media_library', data); return id; }

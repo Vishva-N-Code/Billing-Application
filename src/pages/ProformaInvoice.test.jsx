@@ -86,5 +86,45 @@ describe('Proforma Invoice Component Rendering & Pagination', () => {
       expect(titles.length).toBeGreaterThan(0);
     });
   });
+
+  it('should render Party Column checkbox and party input in details tab', async () => {
+    render(
+      <MemoryRouter>
+        <ProformaInvoice />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Party Column/i)).toBeInTheDocument();
+    });
+
+    const partyInput = screen.getByPlaceholderText(/Party \(Optional\)/i);
+    expect(partyInput).toBeInTheDocument();
+  });
+
+  it('should toggle Party column in preview table when checked in details tab', async () => {
+    render(
+      <MemoryRouter>
+        <ProformaInvoice />
+      </MemoryRouter>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByLabelText(/Party Column/i)).toBeInTheDocument();
+    });
+
+    // Toggle Party Column on
+    const partyCheckbox = screen.getByLabelText(/Party Column/i);
+    fireEvent.click(partyCheckbox);
+
+    // Switch to preview tab
+    const previewTab = screen.getByRole('button', { name: /Preview/i });
+    fireEvent.click(previewTab);
+
+    // Header should contain Party column
+    await waitFor(() => {
+      expect(screen.getByRole('columnheader', { name: /^Party$/i })).toBeInTheDocument();
+    });
+  });
 });
 

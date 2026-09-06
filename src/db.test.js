@@ -25,7 +25,13 @@ vi.mock('dexie', () => {
         get: vi.fn()
       };
       this.cashbills = {};
-      this.deliveryChellans = {};
+      this.deliveryChellans = {
+        toArray: vi.fn().mockResolvedValue([]),
+        add: vi.fn(),
+        update: vi.fn(),
+        delete: vi.fn(),
+        get: vi.fn()
+      };
       this.quotations = {};
       this.proformaInvoices = {
         toArray: vi.fn().mockResolvedValue([]),
@@ -75,7 +81,7 @@ vi.mock('./supabase', () => {
 });
 
 // Import db and supabase
-import { db, getNextInvoiceNumber, updateInvoiceCounter, getNextProformaInvoiceNumber, pushToCloud, removeFromCloud } from './db';
+import { db, getNextInvoiceNumber, updateInvoiceCounter, getNextDcNumber, updateDcCounter, getNextProformaInvoiceNumber, pushToCloud, removeFromCloud } from './db';
 import { supabase, BUSINESS_ID } from './supabase';
 
 describe('Database and Sync Operations', () => {
@@ -119,6 +125,24 @@ describe('Database and Sync Operations', () => {
       db.settings.put.mockResolvedValue(undefined);
       await updateInvoiceCounter('046');
       expect(db.settings.put).toHaveBeenCalledWith({ key: 'invoiceCounter', value: 47 });
+    });
+
+    it('getNextDcNumber should calculate 1 higher than maximum DC number stored in db.deliveryChellans', async () => {
+      db.settings.get.mockResolvedValue({ value: 67 });
+      db.deliveryChellans.toArray.mockResolvedValue([
+        { dcNo: 'OSC0067' },
+        { dcNo: 'OSC0073' },
+        { dcNo: 'OSC0070' }
+      ]);
+      const num = await getNextDcNumber();
+      expect(num).toBe('0074');
+      expect(db.settings.put).toHaveBeenCalledWith({ key: 'dcCounter', value: 74 });
+    });
+
+    it('updateDcCounter should write incremented integer back to settings', async () => {
+      db.settings.put.mockResolvedValue(undefined);
+      await updateDcCounter('OSC0073');
+      expect(db.settings.put).toHaveBeenCalledWith({ key: 'dcCounter', value: 74 });
     });
 
     it('getNextProformaInvoiceNumber should allocate prefix-based numbers like K001 for Kotec and F001 for Fuso', async () => {
