@@ -21,6 +21,7 @@ export default function Quotation({ exportItem }) {
     introText: 'We submit our lowest quotation for 3 ton Forklift for shift basis.',
     notes: ['GST 18% EXTRA.', 'Work will be initiated once PO Received.'],
     termsAndConditions: '',
+    showPaymentInfo: false,
   });
 
   const [items, setItems] = useState([
@@ -402,6 +403,32 @@ export default function Quotation({ exportItem }) {
               </div>
             </div>
 
+            <div className="card" style={{ marginBottom: '16px' }}>
+              <div className="card-title">Payment Information (Optional)</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border-color)' }}>
+                <input
+                  type="checkbox"
+                  id="showPaymentInfo"
+                  style={{ width: '18px', height: '18px', cursor: 'pointer', accentColor: 'var(--accent)' }}
+                  checked={form.showPaymentInfo || false}
+                  onChange={e => setForm({ ...form, showPaymentInfo: e.target.checked })}
+                />
+                <label htmlFor="showPaymentInfo" style={{ cursor: 'pointer', fontSize: '0.88rem', fontWeight: 500, margin: 0 }}>
+                  Include bank / payment details in the quotation
+                </label>
+              </div>
+              {form.showPaymentInfo && (
+                <div style={{ marginTop: '10px', padding: '10px 14px', background: 'var(--bg-elevated)', borderRadius: '8px', border: '1px solid var(--border-color)', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                  <div style={{ fontWeight: 600, marginBottom: '4px', color: 'var(--text-primary)' }}>Preview — details pulled from company profile:</div>
+                  <div>Account Name: <strong>{companyProfile.bankName || '—'}</strong></div>
+                  <div>Account No: <strong>{companyProfile.bankAccount || '—'}</strong></div>
+                  <div>IFSC: <strong>{companyProfile.bankIFSC || '—'}</strong></div>
+                  <div>Branch: <strong>{companyProfile.bankBranch || '—'}</strong></div>
+                  <div style={{ marginTop: '6px', fontSize: '0.78rem', color: 'var(--text-muted)' }}>To update these details, go to Settings → Bank Information.</div>
+                </div>
+              )}
+            </div>
+
             <div className="card">
               <SignatureUpload signature={signature} onSignatureChange={setSignature} />
             </div>
@@ -533,17 +560,7 @@ export default function Quotation({ exportItem }) {
                                   </tr>
                                 );
                               })}
-                              {isLastPage && totalAmount > 0 && (
-                                <tr style={{ fontWeight: 700, background: '#f9f9f9' }}>
-                                  <td colSpan={4} style={{ textAlign: 'right', fontWeight: 700 }}>TOTAL</td>
-                                  <td className="amount-col" style={{ fontWeight: 800 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '6px' }}>
-                                      <span style={{ fontSize: '0.85rem', color: '#333', fontWeight: 700 }}>Rs.</span>
-                                      <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>{formatCurrency(totalAmount)}</span>
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
+
                             </tbody>
                           </table>
 
@@ -571,6 +588,41 @@ export default function Quotation({ exportItem }) {
                                   <div style={{ fontSize: '0.75rem', color: '#444', whiteSpace: 'pre-line', lineHeight: '1.4' }}>
                                     {form.termsAndConditions}
                                   </div>
+                                </div>
+                              )}
+
+                              {/* Payment / Bank Info (Optional) */}
+                              {form.showPaymentInfo && (companyProfile.bankAccount || companyProfile.bankName) && (
+                                <div style={{ marginTop: '12px', borderTop: '2px solid #c8952e', paddingTop: '8px' }}>
+                                  <div style={{ fontWeight: 700, fontSize: '0.82rem', marginBottom: '6px', color: '#c8952e', letterSpacing: '0.5px' }}>PAYMENT INFORMATION:</div>
+                                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.8rem' }}>
+                                    <tbody>
+                                      {companyProfile.bankName && (
+                                        <tr>
+                                          <td style={{ padding: '2px 8px 2px 0', fontWeight: 600, color: '#555', width: '38%' }}>Account Name</td>
+                                          <td style={{ padding: '2px 0', color: '#222' }}>: {companyProfile.bankName}</td>
+                                        </tr>
+                                      )}
+                                      {companyProfile.bankAccount && (
+                                        <tr>
+                                          <td style={{ padding: '2px 8px 2px 0', fontWeight: 600, color: '#555' }}>Account Number</td>
+                                          <td style={{ padding: '2px 0', color: '#222', fontWeight: 700, letterSpacing: '1px' }}>: {companyProfile.bankAccount}</td>
+                                        </tr>
+                                      )}
+                                      {companyProfile.bankIFSC && (
+                                        <tr>
+                                          <td style={{ padding: '2px 8px 2px 0', fontWeight: 600, color: '#555' }}>IFSC Code</td>
+                                          <td style={{ padding: '2px 0', color: '#222' }}>: {companyProfile.bankIFSC}</td>
+                                        </tr>
+                                      )}
+                                      {companyProfile.bankBranch && (
+                                        <tr>
+                                          <td style={{ padding: '2px 8px 2px 0', fontWeight: 600, color: '#555' }}>Branch</td>
+                                          <td style={{ padding: '2px 0', color: '#222' }}>: {companyProfile.bankBranch}</td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
                                 </div>
                               )}
 

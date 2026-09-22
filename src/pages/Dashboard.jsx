@@ -8,7 +8,8 @@ import {
   TrendingUp, TrendingDown, Users, Receipt, Banknote, 
   ArrowUpRight, ArrowDownRight, Activity, Calendar, Zap, DollarSign, 
   BarChart3, Award, Clock, Plus, ExternalLink, ShieldCheck, AlertTriangle, 
-  FileText, CheckCircle2, CircleDashed, ChevronRight, Layers, Eye, Sparkles
+  FileText, CheckCircle2, CircleDashed, ChevronRight, Layers, Eye, Sparkles,
+  Search, X
 } from 'lucide-react';
 import { db } from '../db';
 
@@ -37,6 +38,13 @@ export default function Dashboard() {
   const [chartMode, setChartMode] = useState('bars'); // 'bars' | 'area'
   const isFetchingRef = useRef(false);
 
+  // Global search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+  const [allDocs, setAllDocs] = useState([]);
+  const searchRef = useRef(null);
+
   useEffect(() => {
     fetchDashboardData(false);
   }, [selectedYear]);
@@ -64,11 +72,25 @@ export default function Dashboard() {
 
     try {
       // Parallel fast fetch from local Dexie database
-      const [invoices, cashbills, vehicleSections] = await Promise.all([
+      const [invoices, cashbills, vehicleSections, quotations, deliveryChellans, proformaInvoices] = await Promise.all([
         db.invoices.toArray(),
         db.cashbills.toArray(),
-        db.vehicleDetails.toArray()
+        db.vehicleDetails.toArray(),
+        db.quotations.toArray().catch(() => []),
+        db.deliveryChellans.toArray().catch(() => []),
+        db.proformaInvoices.toArray().catch(() => [])
       ]);
+
+      // Build a unified all-docs list for global search
+      const unifiedDocs = [
+        ...invoices.map(d => ({ id: d.id, docName: d.docName || d.invoiceNo || '', clientCompany: d.clientCompany || '', date: d.date, type: 'Tax Invoice', routePath: '/tax-invoice', loadItem: d })),
+        ...cashbills.map(d => ({ id: d.id, docName: d.docName || d.billNo || '', clientCompany: d.clientCompany || '', date: d.date, type: 'Cash Bill', routePath: '/cash-bill', loadItem: d })),
+        ...quotations.map(d => ({ id: d.id, docName: d.docName || '', clientCompany: d.clientCompany || d.toCompany || d.data?.form?.toCompany || '', date: d.date, type: 'Quotation', routePath: '/quotation', loadItem: d })),
+        ...deliveryChellans.map(d => ({ id: d.id, docName: d.docName || d.dcNo || '', clientCompany: d.clientCompany || '', date: d.date, type: 'Delivery Chellan', routePath: '/delivery-chellan', loadItem: d })),
+        ...proformaInvoices.map(d => ({ id: d.id, docName: d.docName || d.piNo || '', clientCompany: d.clientCompany || '', date: d.date, type: 'Proforma Invoice', routePath: '/proforma-invoice', loadItem: d }))
+      ].filter(d => d.docName.trim() !== '' || d.clientCompany.trim() !== '')
+        .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+      setAllDocs(unifiedDocs);
       
       // 1. Calculate vehicle document expiry alerts
       const alerts = [];
@@ -296,6 +318,43 @@ export default function Dashboard() {
 
   const COLORS = ['#ffb700', '#00b0ff', '#00e676', '#ff4d4d'];
 
+  // Global search handler
+  const handleSearch = (query) => {
+    setSearchQuery(query);
+    if (query.trim().length < 2) {
+      setSearchResults([]);
+      setShowSearchResults(false);
+      return;
+    }
+    const q = query.toLowerCase();
+    const results = allDocs.filter(d =>
+      d.docName.toLowerCase().includes(q) ||
+      d.clientCompany.toLowerCase().includes(q) ||
+      d.type.toLowerCase().includes(q)
+    ).slice(0, 10);
+    setSearchResults(results);
+    setShowSearchResults(true);
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowSearchResults(false);
+  };
+
+  const openDoc = (doc) => {
+    clearSearch();
+    navigate(doc.routePath, { state: { loadItem: doc.loadItem } });
+  };
+
+  const DOC_TYPE_COLORS = {
+    'Tax Invoice': 'gold',
+    'Cash Bill': 'blue',
+    'Quotation': 'purple',
+    'Delivery Chellan': 'cyan',
+    'Proforma Invoice': 'green'
+  };
+
 
   if (loading) {
     return (
@@ -319,6 +378,46 @@ export default function Dashboard() {
         </div>
 
         <div className="header-actions">
+          {/* Global Search Bar */}
+          <div className="global-search-wrap" ref={searchRef}>
+            <div className="global-search-input-wrap">
+              <Search size={16} className="search-icon" />
+              <input
+                className="global-search-input"
+                type="text"
+                placeholder="Search documents, clients..."
+                value={searchQuery}
+                onChange={e => handleSearch(e.target.value)}
+                onFocus={() => searchQuery.length >= 2 && setShowSearchResults(true)}
+                onBlur={() => setTimeout(() => setShowSearchResults(false), 200)}
+                autoComplete="off"
+              />
+              {searchQuery && (
+                <button className="search-clear-btn" onClick={clearSearch}><X size={14} /></button>
+              )}
+            </div>
+            {showSearchResults && (
+              <div className="search-results-dropdown">
+                {searchResults.length === 0 ? (
+                  <div className="search-no-results">No documents found for "{searchQuery}"</div>
+                ) : (
+                  searchResults.map((doc, i) => (
+                    <div key={i} className="search-result-item" onMouseDown={() => openDoc(doc)}>
+                      <span className={`search-doc-tag ${DOC_TYPE_COLORS[doc.type] || 'gold'}`}>
+                        {doc.type === 'Tax Invoice' ? 'TAX' : doc.type === 'Cash Bill' ? 'CASH' : doc.type === 'Quotation' ? 'QUOT' : doc.type === 'Delivery Chellan' ? 'DC' : 'PI'}
+                      </span>
+                      <div className="search-result-info">
+                        <span className="search-result-name">{doc.docName || doc.clientCompany || 'Unnamed'}</span>
+                        {doc.clientCompany && <span className="search-result-client">{doc.clientCompany}</span>}
+                      </div>
+                      <span className="search-result-date">{formatDate(doc.date)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Quick Create Buttons */}
           <div className="quick-actions-bar">
             <button className="quick-btn gold" onClick={() => navigate('/tax-invoice')}>
@@ -1449,6 +1548,150 @@ export default function Dashboard() {
           padding: 24px;
           color: var(--text-muted);
           font-size: 0.82rem;
+        }
+
+        /* Global Search Bar */
+        .global-search-wrap {
+          position: relative;
+          z-index: 200;
+        }
+
+        .global-search-input-wrap {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          background: rgba(255, 255, 255, 0.05);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          border-radius: 12px;
+          padding: 8px 14px;
+          transition: all 0.2s ease;
+          min-width: 260px;
+        }
+
+        .global-search-input-wrap:focus-within {
+          border-color: rgba(255, 183, 0, 0.5);
+          background: rgba(255, 183, 0, 0.04);
+          box-shadow: 0 0 0 3px rgba(255, 183, 0, 0.08);
+        }
+
+        .search-icon {
+          color: var(--text-muted);
+          flex-shrink: 0;
+        }
+
+        .global-search-input {
+          background: transparent;
+          border: none;
+          outline: none;
+          color: #fff;
+          font-size: 0.85rem;
+          font-weight: 500;
+          flex: 1;
+          min-width: 0;
+        }
+
+        .global-search-input::placeholder {
+          color: var(--text-muted);
+        }
+
+        .search-clear-btn {
+          background: transparent;
+          border: none;
+          color: var(--text-muted);
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          padding: 0;
+          transition: color 0.2s;
+          flex-shrink: 0;
+        }
+
+        .search-clear-btn:hover { color: #fff; }
+
+        .search-results-dropdown {
+          position: absolute;
+          top: calc(100% + 8px);
+          left: 0;
+          right: 0;
+          background: rgba(15, 18, 28, 0.98);
+          backdrop-filter: blur(20px);
+          border: 1px solid rgba(255, 183, 0, 0.2);
+          border-radius: 14px;
+          overflow: hidden;
+          box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.04);
+          min-width: 360px;
+          max-height: 400px;
+          overflow-y: auto;
+        }
+
+        .search-no-results {
+          padding: 18px 16px;
+          color: var(--text-muted);
+          font-size: 0.82rem;
+          text-align: center;
+        }
+
+        .search-result-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 14px;
+          cursor: pointer;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+          transition: background 0.15s ease;
+        }
+
+        .search-result-item:last-child { border-bottom: none; }
+
+        .search-result-item:hover {
+          background: rgba(255, 183, 0, 0.07);
+        }
+
+        .search-doc-tag {
+          font-size: 0.62rem;
+          font-weight: 800;
+          padding: 2px 6px;
+          border-radius: 4px;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+          flex-shrink: 0;
+        }
+
+        .search-doc-tag.gold { background: rgba(255, 183, 0, 0.15); color: var(--accent-gold); }
+        .search-doc-tag.blue { background: rgba(0, 176, 255, 0.15); color: var(--accent-blue); }
+        .search-doc-tag.purple { background: rgba(179, 136, 255, 0.15); color: #b388ff; }
+        .search-doc-tag.cyan { background: rgba(6, 182, 212, 0.15); color: #06b6d4; }
+        .search-doc-tag.green { background: rgba(0, 230, 118, 0.15); color: var(--accent-success); }
+
+        .search-result-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .search-result-name {
+          display: block;
+          font-weight: 600;
+          font-size: 0.82rem;
+          color: #fff;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .search-result-client {
+          display: block;
+          font-size: 0.72rem;
+          color: var(--text-muted);
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .search-result-date {
+          font-size: 0.72rem;
+          color: var(--text-secondary);
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         /* Responsive Breakpoints */

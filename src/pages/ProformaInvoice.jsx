@@ -600,22 +600,22 @@ export default function ProformaInvoice({ exportItem }) {
                           <table className="doc-table" style={{ marginTop: isFirstPage ? '8px' : '4px', tableLayout: 'fixed', width: '100%' }}>
                             <thead>
                               <tr>
-                                <th style={{ width: '38px', textAlign: 'center' }}>S.No</th>
-                                <th style={{ width: '82px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
-                                {showParty && <th style={{ width: '105px', textAlign: 'left' }}>Party</th>}
+                                <th style={{ width: '36px', textAlign: 'center' }}>S.No</th>
+                                <th style={{ width: '88px', textAlign: 'center', whiteSpace: 'nowrap' }}>Date</th>
+                                {showParty && <th style={{ width: '100px', textAlign: 'left' }}>Party</th>}
                                 <th style={{ textAlign: 'left' }}>Description</th>
-                                <th style={{ width: '85px', textAlign: 'center' }}>Timesheet No</th>
-                                <th style={{ width: '60px', textAlign: 'center' }}>
+                                <th style={{ width: '76px', textAlign: 'center', fontSize: '0.78rem', lineHeight: '1.3' }}>Timesheet<br />No</th>
+                                <th style={{ width: '56px', textAlign: 'center', lineHeight: '1.3' }}>
                                   {(() => {
                                     const hasHours = form.configs?.some(c => c.unitType === 'hours');
                                     const hasShifts = form.configs?.some(c => c.unitType === 'shifts');
-                                    if (hasHours && hasShifts) return 'Shift/Hrs';
-                                    if (hasHours) return 'Hours';
-                                    return 'Shift';
+                                    if (hasHours && hasShifts) return <><span>SHFT/</span><br /><span>HR</span></>;
+                                    if (hasHours) return 'Hrs';
+                                    return 'Shifts';
                                   })()}
                                 </th>
-                                <th style={{ width: '95px', textAlign: 'right' }}>Rate</th>
-                                <th style={{ width: '120px', textAlign: 'right' }}>Amount</th>
+                                <th style={{ width: '92px', textAlign: 'right', whiteSpace: 'nowrap' }}>Rate</th>
+                                <th style={{ width: '115px', textAlign: 'right', whiteSpace: 'nowrap' }}>Amount</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -634,7 +634,7 @@ export default function ProformaInvoice({ exportItem }) {
                                 return (
                                   <tr key={`i-${pageIndex}-${localIndex}`}>
                                     <td style={{ textAlign: 'center' }}>{row.sno}</td>
-                                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap' }}>{formatDate(item.date)}</td>
+                                    <td style={{ textAlign: 'center', whiteSpace: 'nowrap', padding: '6px 4px' }}>{formatDate(item.date)}</td>
                                     {showParty && <td style={{ textAlign: 'left', wordBreak: 'break-word' }}>{item.party || '—'}</td>}
                                     <td style={{ textAlign: 'left', wordBreak: 'break-word' }}>{item.description || '—'}</td>
                                     <td style={{ textAlign: 'center' }}>{item.timesheetNo || '—'}</td>

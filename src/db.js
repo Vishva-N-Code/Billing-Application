@@ -189,7 +189,18 @@ export async function initSettings() {
         }
       }
 
-      if (missingSeedInvoices.length > 0 || missingSeedBills.length > 0 || missingSeedCusts.length > 0 || (missingDcs && missingDcs.length > 0)) {
+      let missingQuotations = [];
+      if (seedInvoices.quotations && seedInvoices.quotations.length > 0) {
+        const allQuotations = await db.quotations.toArray();
+        const localQuotationNames = new Set(allQuotations.map(q => normKey(q.docName)));
+        missingQuotations = seedInvoices.quotations.filter(q => q.docName && !localQuotationNames.has(normKey(q.docName)));
+        if (missingQuotations.length > 0) {
+          console.log(`[Fast Init] Populating ${missingQuotations.length} missing seed quotations into Dexie...`);
+          await db.quotations.bulkAdd(missingQuotations.map(({ id, ...rest }) => rest));
+        }
+      }
+
+      if (missingSeedInvoices.length > 0 || missingSeedBills.length > 0 || missingSeedCusts.length > 0 || (missingDcs && missingDcs.length > 0) || missingQuotations.length > 0) {
         notifyLocalChange();
       }
     } catch (seedErr) {
@@ -235,8 +246,9 @@ export async function initSettings() {
       }
     }
     // Purge local blank drafts (zero total AND empty client company)
-    const tablesToClean = [db.invoices, db.cashbills, db.quotations, db.deliveryChellans, db.proformaInvoices];
-    for (const table of tablesToClean) {
+    // Note: quotations have no grandTotal — use docName as the validity check for those
+    const tablesWithTotal = [db.invoices, db.cashbills, db.deliveryChellans, db.proformaInvoices];
+    for (const table of tablesWithTotal) {
       const items = await table.toArray();
       const emptyIds = items.filter(item => {
         const isClientEmpty = !item.clientCompany || item.clientCompany.trim() === '';
@@ -245,6 +257,18 @@ export async function initSettings() {
       }).map(item => item.id);
       if (emptyIds.length > 0) {
         await table.bulkDelete(emptyIds);
+      }
+    }
+    // Quotations: only purge if BOTH docName and clientCompany are empty/blank
+    {
+      const items = await db.quotations.toArray();
+      const emptyIds = items.filter(item => {
+        const isClientEmpty = !item.clientCompany || item.clientCompany.trim() === '';
+        const isDocNameEmpty = !item.docName || item.docName.trim() === '';
+        return isClientEmpty && isDocNameEmpty;
+      }).map(item => item.id);
+      if (emptyIds.length > 0) {
+        await db.quotations.bulkDelete(emptyIds);
       }
     }
 
@@ -550,15 +574,56 @@ export async function syncFromCloud() {
       return false;
     };
 
+    async function fetchRemoteTable(remote) {
+      if (remote === 'quotations') {
+        // Quotations contain heavy embedded base64 signatures that cause statement timeout (code 57014) on single batch select('*').
+        // Fetch IDs first, then batch retrieve in small chunks:
+        const { data: metaList, error: metaErr } = await fetchWithRetry(() =>
+          supabase.from('quotations').select('id').eq('business_id', BUSINESS_ID)
+        );
+        if (metaErr || !metaList) return { data: null, error: metaErr };
+        
+        const allRecords = [];
+        const chunkSize = 5;
+        for (let i = 0; i < metaList.length; i += chunkSize) {
+          const chunkIds = metaList.slice(i, i + chunkSize).map(r => r.id);
+          const res = await fetchWithRetry(() =>
+            supabase.from('quotations').select('*').in('id', chunkIds)
+          );
+          if (res && res.data) {
+            allRecords.push(...res.data);
+          }
+        }
+        return { data: allRecords, error: null };
+      }
+
+      let res = await fetchWithRetry(() =>
+        supabase.from(remote).select('*').eq('business_id', BUSINESS_ID)
+      );
+      if (res.error && (res.error.code === '57014' || res.error.message?.includes('timeout'))) {
+        console.warn(`[Sync] Timeout fetching ${remote}, retrying in chunks...`);
+        const { data: metaList } = await fetchWithRetry(() =>
+          supabase.from(remote).select('id').eq('business_id', BUSINESS_ID)
+        );
+        if (metaList && metaList.length > 0) {
+          const allRecords = [];
+          for (let i = 0; i < metaList.length; i += 10) {
+            const chunkIds = metaList.slice(i, i + 10).map(r => r.id);
+            const chunkRes = await fetchWithRetry(() =>
+              supabase.from(remote).select('*').in('id', chunkIds)
+            );
+            if (chunkRes && chunkRes.data) allRecords.push(...chunkRes.data);
+          }
+          return { data: allRecords, error: null };
+        }
+      }
+      return res;
+    }
+
     // Fetch all tables and settings from Supabase in parallel in 1 round trip
     const [syncResults, settsResult] = await Promise.all([
       Promise.all(tableMappings.map(async (mapping) => {
-        const { data, error } = await fetchWithRetry(() =>
-          supabase
-            .from(mapping.remote)
-            .select('*')
-            .eq('business_id', BUSINESS_ID)
-        );
+        const { data, error } = await fetchRemoteTable(mapping.remote);
         return { mapping, data, error };
       })),
       fetchWithRetry(() => supabase.from('settings').select('*').eq('business_id', BUSINESS_ID))

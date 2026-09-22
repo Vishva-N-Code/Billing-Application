@@ -19,7 +19,7 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         skipWaiting: true,
         clientsClaim: true,
-        maximumFileSizeToCacheInBytes: 35 * 1024 * 1024, // 35 MB (for seed data & assets)
+        maximumFileSizeToCacheInBytes: 100 * 1024 * 1024, // 100 MB (for full offline seed data including all quotations)
       },
       devOptions: {
         enabled: false,
@@ -28,7 +28,7 @@ export default defineConfig({
   ],
   base: '/',
   build: {
-    chunkSizeWarningLimit: 25000, // raise warning limit for comprehensive offline seed database
+    chunkSizeWarningLimit: 100000, // raise warning limit for comprehensive offline seed database
     rollupOptions: {
       output: {
         manualChunks: {

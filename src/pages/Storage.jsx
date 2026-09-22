@@ -22,6 +22,7 @@ export default function Storage() {
   const [dcs, setDcs] = useState([]);
   const [experienceCerts, setExperienceCerts] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [docTypeFilter, setDocTypeFilter] = useState('ALL');
   const [selectedDocs, setSelectedDocs] = useState([]);
   const [exportingDoc, setExportingDoc] = useState(null);
   const [exportProgress, setExportProgress] = useState(null);
@@ -456,6 +457,29 @@ export default function Storage() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
+          <select 
+            value={docTypeFilter} 
+            onChange={e => setDocTypeFilter(e.target.value)}
+            style={{ 
+              padding: '10px 14px', 
+              borderRadius: '8px', 
+              border: '1px solid rgba(255,255,255,0.1)', 
+              background: '#1a1d27', 
+              color: '#fff', 
+              outline: 'none',
+              fontFamily: 'inherit',
+              fontSize: '0.9rem',
+              cursor: 'pointer'
+            }}
+          >
+            <option value="ALL">All Document Types</option>
+            <option value="INVOICE">Tax Invoices</option>
+            <option value="QUOTATION">Quotations</option>
+            <option value="PROFORMA">Proforma Invoices</option>
+            <option value="CASHBILL">Cash Bills</option>
+            <option value="DC">Delivery Challans</option>
+            <option value="EXPERIENCE">Experience Certificates</option>
+          </select>
           {selectedDocs.length > 0 && (
             <div className="btn-group slide-in">
               <button className="btn btn-primary" onClick={handleDownloadSelected} disabled={!!exportProgress} style={{ background: 'var(--accent-success)', borderColor: 'var(--accent-success)' }}>
@@ -468,57 +492,57 @@ export default function Storage() {
           )}
         </div>
 
-        {(!searchTerm || filteredInvoices.length > 0) && (
+        {(docTypeFilter === 'ALL' || docTypeFilter === 'INVOICE') && (!searchTerm || filteredInvoices.length > 0) && (
           <div className="card" style={{ marginBottom: '24px' }}>
             <div className="card-title">Tax Invoices ({invoices.filter(i => filterDocs([i]).length > 0).length})</div>
             {renderTable(filteredInvoices, 'invoice', '/tax-invoice', invoices.filter(i => filterDocs([i]).length > 0).length)}
           </div>
         )}
         
-        {(!searchTerm || filteredQuotations.length > 0) && (
+        {(docTypeFilter === 'ALL' || docTypeFilter === 'QUOTATION') && (!searchTerm || filteredQuotations.length > 0) && (
           <div className="card" style={{ marginBottom: '24px' }}>
             <div className="card-title">Quotations ({quotations.filter(i => filterDocs([i]).length > 0).length})</div>
             {renderTable(filteredQuotations, 'quotation', '/quotation', quotations.filter(i => filterDocs([i]).length > 0).length)}
           </div>
         )}
 
-        {(!searchTerm || filteredProformas.length > 0) && (
+        {(docTypeFilter === 'ALL' || docTypeFilter === 'PROFORMA') && (!searchTerm || filteredProformas.length > 0) && (
           <div className="card" style={{ marginBottom: '24px' }}>
             <div className="card-title">Proforma Invoices ({proformas.filter(i => filterDocs([i]).length > 0).length})</div>
             {renderTable(filteredProformas, 'proforma', '/proforma-invoice', proformas.filter(i => filterDocs([i]).length > 0).length)}
           </div>
         )}
 
-        {(!searchTerm || filteredCashBills.length > 0) && (
+        {(docTypeFilter === 'ALL' || docTypeFilter === 'CASHBILL') && (!searchTerm || filteredCashBills.length > 0) && (
           <div className="card" style={{ marginBottom: '24px' }}>
             <div className="card-title">Cash Bills ({cashBills.filter(i => filterDocs([i]).length > 0).length})</div>
             {renderTable(filteredCashBills, 'cashbill', '/cash-bill', cashBills.filter(i => filterDocs([i]).length > 0).length)}
           </div>
         )}
 
-        {(!searchTerm || filteredDcs.length > 0) && (
+        {(docTypeFilter === 'ALL' || docTypeFilter === 'DC') && (!searchTerm || filteredDcs.length > 0) && (
           <div className="card" style={{ marginBottom: '24px' }}>
             <div className="card-title">Delivery Challans ({dcs.filter(i => filterDocs([i]).length > 0).length})</div>
             {renderTable(filteredDcs, 'dc', '/delivery-chellan', dcs.filter(i => filterDocs([i]).length > 0).length)}
           </div>
         )}
 
-        {(!searchTerm || filteredExperienceCerts.length > 0) && (
+        {(docTypeFilter === 'ALL' || docTypeFilter === 'EXPERIENCE') && (!searchTerm || filteredExperienceCerts.length > 0) && (
           <div className="card" style={{ marginBottom: '24px' }}>
             <div className="card-title">Experience Certificates ({experienceCerts.filter(i => filterDocs([i]).length > 0).length})</div>
             {renderTable(filteredExperienceCerts, 'experience', '/experience-certificate', experienceCerts.filter(i => filterDocs([i]).length > 0).length)}
           </div>
         )}
 
-        {searchTerm && 
-         filteredInvoices.length === 0 && 
-         filteredQuotations.length === 0 && 
-         filteredProformas.length === 0 &&
-         filteredCashBills.length === 0 &&
-         filteredDcs.length === 0 &&
-         filteredExperienceCerts.length === 0 && (
+        {(searchTerm || docTypeFilter !== 'ALL') && 
+         ((docTypeFilter !== 'ALL' && docTypeFilter !== 'INVOICE') || filteredInvoices.length === 0) && 
+         ((docTypeFilter !== 'ALL' && docTypeFilter !== 'QUOTATION') || filteredQuotations.length === 0) && 
+         ((docTypeFilter !== 'ALL' && docTypeFilter !== 'PROFORMA') || filteredProformas.length === 0) &&
+         ((docTypeFilter !== 'ALL' && docTypeFilter !== 'CASHBILL') || filteredCashBills.length === 0) &&
+         ((docTypeFilter !== 'ALL' && docTypeFilter !== 'DC') || filteredDcs.length === 0) &&
+         ((docTypeFilter !== 'ALL' && docTypeFilter !== 'EXPERIENCE') || filteredExperienceCerts.length === 0) && (
           <div className="card" style={{ textAlign: 'center', padding: '40px' }}>
-            <div style={{ color: 'var(--text-muted)' }}>No documents matched your search.</div>
+            <div style={{ color: 'var(--text-muted)' }}>No documents found for the selected filters.</div>
           </div>
         )}
       </div>
