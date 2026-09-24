@@ -410,9 +410,7 @@ export async function getWorkLogsByOperatorDate(operatorId, date) {
 }
 
 export async function addWorkLog(log) {
-  // Always calculate OT amount before saving
-  const otAmount = parseFloat(log.ot_hours || 0) * parseFloat(log.ot_rate || 0);
-  // Enforce absent logic
+  // Enforce absent logic FIRST before computing OT amount
   if (log.work_status === 'ABSENT') {
     log.shift_count = 0;
     log.ot_hours = 0;
@@ -421,6 +419,8 @@ export async function addWorkLog(log) {
   if (log.work_status === 'PRESENT' && parseFloat(log.shift_count || 0) < 1) {
     log.shift_count = 1;
   }
+  // Calculate OT amount after overrides are applied
+  const otAmount = parseFloat(log.ot_hours || 0) * parseFloat(log.ot_rate || 0);
 
   const { data, error } = await supabaseOMS
     .from('oms_work_logs')
@@ -433,12 +433,14 @@ export async function addWorkLog(log) {
 }
 
 export async function updateWorkLog(id, updates) {
-  const otAmount = parseFloat(updates.ot_hours || 0) * parseFloat(updates.ot_rate || 0);
+  // Enforce absent logic FIRST before computing OT amount
   if (updates.work_status === 'ABSENT') {
     updates.shift_count = 0;
     updates.ot_hours = 0;
     updates.ot_rate = 0;
   }
+  // Calculate OT amount after overrides are applied
+  const otAmount = parseFloat(updates.ot_hours || 0) * parseFloat(updates.ot_rate || 0);
   const { data, error } = await supabaseOMS
     .from('oms_work_logs')
     .update({ ...updates, ot_amount: otAmount, updated_at: new Date().toISOString() })
@@ -509,7 +511,13 @@ export async function calculatePayroll(operatorId, month, settings) {
   const totalShifts = logs.reduce((s, l) => s + parseFloat(l.shift_count || 0), 0);
   const otHours = logs.reduce((s, l) => s + parseFloat(l.ot_hours || 0), 0);
   const otAmount = logs.reduce((s, l) => s + parseFloat(l.ot_amount || 0), 0);
-  const otRate = parseFloat(settings.ot_rate_per_hour || 500);
+
+  // Derive the effective OT rate from actual log data (weighted average).
+  // Falls back to the settings rate if no OT hours were logged.
+  const settingsOtRate = parseFloat(settings.ot_rate_per_hour || 500);
+  const effectiveOtRate = otHours > 0
+    ? parseFloat((otAmount / otHours).toFixed(2))
+    : settingsOtRate;
 
   // Base salary is ALWAYS the full monthly salary (compulsory)
   const baseEarnings = parseFloat(operator.salary || 0);
@@ -526,8 +534,8 @@ export async function calculatePayroll(operatorId, month, settings) {
     operator_id: operatorId,
     month,
     total_shifts: totalShifts,
-    ot_hours: otHours,
-    ot_rate_snapshot: otRate,
+    ot_hours: parseFloat(otHours.toFixed(2)),
+    ot_rate_snapshot: effectiveOtRate,
     ot_amount: parseFloat(otAmount.toFixed(2)),
     base_earnings: parseFloat(baseEarnings.toFixed(2)),
     allowances: 0,
