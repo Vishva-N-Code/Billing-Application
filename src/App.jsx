@@ -18,6 +18,7 @@ import Reports from './pages/Reports';
 import ExperienceCertificate from './pages/ExperienceCertificate';
 import UpdatePrompt from './components/UpdatePrompt';
 import { syncFromCloud, initSettings } from './db';
+import { supabase, BUSINESS_ID } from './supabase';
 import './index.css';
 
 // ── Lazy-load OMS pages for performance ──
@@ -107,8 +108,7 @@ function App() {
     }
     initSync();
 
-    // ── Periodic re-sync every 45 s so changes on one device (e.g. payment
-    //    status toggle) are automatically picked up by all other devices. ──
+    // ── Periodic re-sync every 45 s (fallback safety net) ──
     const SYNC_INTERVAL_MS = 45_000;
     let isSyncing = false;
     const pollTimer = setInterval(async () => {
@@ -123,7 +123,54 @@ function App() {
       }
     }, SYNC_INTERVAL_MS);
 
-    return () => clearInterval(pollTimer);
+    // ── Supabase Realtime: instantly sync when ANY device updates records ──
+    // When Device A updates a payment status, Supabase broadcasts the change.
+    // All other open devices receive it here and trigger a local sync immediately.
+    let realtimeSyncTimeout = null;
+    const realtimeChannel = supabase
+      .channel(`realtime-billing-${BUSINESS_ID}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'invoices',
+          filter: `business_id=eq.${BUSINESS_ID}`,
+        },
+        () => {
+          // Debounce: avoid multiple rapid syncs if several rows change at once
+          clearTimeout(realtimeSyncTimeout);
+          realtimeSyncTimeout = setTimeout(() => {
+            console.log('[Realtime] Invoice change detected — syncing...');
+            syncFromCloud().catch(e => console.warn('[Realtime sync] skipped:', e.message));
+          }, 500);
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'cashbills',
+          filter: `business_id=eq.${BUSINESS_ID}`,
+        },
+        () => {
+          clearTimeout(realtimeSyncTimeout);
+          realtimeSyncTimeout = setTimeout(() => {
+            console.log('[Realtime] Cash Bill change detected — syncing...');
+            syncFromCloud().catch(e => console.warn('[Realtime sync] skipped:', e.message));
+          }, 500);
+        }
+      )
+      .subscribe((status) => {
+        console.log('[Realtime] Channel status:', status);
+      });
+
+    return () => {
+      clearInterval(pollTimer);
+      clearTimeout(realtimeSyncTimeout);
+      supabase.removeChannel(realtimeChannel);
+    };
   }, []);
 
   return (
