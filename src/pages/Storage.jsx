@@ -143,7 +143,6 @@ export default function Storage() {
     if (type === 'cashbill') await deleteCashBill(id);
     if (type === 'dc') await deleteDc(id);
     if (type === 'experience') await deleteExperienceCertificate(id);
-    await fetchData();
   };
 
   const handleOpen = (path, item) => {
@@ -190,7 +189,6 @@ export default function Storage() {
     }
     
     setSelectedDocs([]);
-    await fetchData();
   };
   
   const handleUpdatePayment = async () => {
@@ -205,7 +203,6 @@ export default function Storage() {
     setShowPaymentModal(false);
     setPaymentDoc(null);
     setPaymentAmount('');
-    await fetchData();
   };
 
   const handleToggleStatus = async (item, type) => {
@@ -214,7 +211,6 @@ export default function Storage() {
     const newAmount = newStatus === 'paid' ? item.grandTotal : 0;
     
     await updatePaymentStatus(item.id, type, newAmount, newStatus);
-    await fetchData();
   };
 
   const generatePDF = async (element, docName) => {

@@ -212,8 +212,13 @@ export default function Sidebar() {
                 background: syncError ? '#ff4d4d' : '#00e676',
                 boxShadow: `0 0 10px ${syncError ? '#ff4d4d' : '#00e676'}`
               }} />
-              {!isCollapsed && <span style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-secondary)' }}>BILLING SYNC</span>}
+              {!isCollapsed && <span style={{ fontSize: '0.72rem', fontWeight: 700, color: syncError ? '#ff4d4d' : 'var(--text-secondary)' }}>{syncError ? 'SYNC ERROR (Click to view)' : 'BILLING SYNC'}</span>}
             </div>
+            {syncError && !isCollapsed && (
+              <div style={{ fontSize: '0.65rem', color: '#ff4d4d', marginTop: '4px', textAlign: 'center', padding: '0 8px' }}>
+                {syncError}
+              </div>
+            )}
           </div>
         )}
 

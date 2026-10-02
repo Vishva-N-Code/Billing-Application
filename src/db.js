@@ -540,6 +540,7 @@ export async function syncFromCloud() {
     console.log('--- Sync system PAUSED (Offline) ---');
     return;
   }
+  
   try {
     const tableMappings = [
       { local: db.customers, remote: 'customers', key: 'companyName' },
@@ -552,11 +553,61 @@ export async function syncFromCloud() {
       { local: db.experienceCertificates, remote: 'experience_certificates', key: 'docName' },
     ];
 
+    // --- PRE-SYNC LOCAL DEDUPLICATION PASS ---
+    console.log('--- Running Local Duplicate Cleanup ---');
+    for (const mapping of tableMappings) {
+      try {
+        const items = await mapping.local.toArray();
+        const seen = new Map();
+        const toDelete = [];
+        for (const item of items) {
+          const rawKey = item[mapping.key];
+          if (!rawKey) continue;
+          
+          // Use a strict lowercase string comparison for deduplication to preserve things like leading zeros
+          const k = String(rawKey).trim().toLowerCase();
+          
+          if (seen.has(k)) {
+            const existing = seen.get(k);
+            const eScore = (existing.data ? 10 : 0) + (existing.grandTotal ? 5 : 0) + (existing.id || 0);
+            const cScore = (item.data ? 10 : 0) + (item.grandTotal ? 5 : 0) + (item.id || 0);
+            if (cScore > eScore) {
+              toDelete.push(existing.id);
+              seen.set(k, item);
+            } else {
+              toDelete.push(item.id);
+            }
+          } else {
+            seen.set(k, item);
+          }
+        }
+        if (toDelete.length > 0) {
+          console.log(`Cleaned up ${toDelete.length} local duplicates in ${mapping.remote}`);
+          await mapping.local.bulkDelete(toDelete);
+        }
+      } catch (err) {
+        console.error(`Deduplication error for ${mapping.remote}:`, err);
+      }
+    }
+    // ----------------------------------------
+
     // Helper to determine if a local record needs to be updated with fresh details from cloud
     const shouldUpdateLocal = (localItem, cloudItem) => {
       if (!localItem.data || typeof localItem.data !== 'object' || Object.keys(localItem.data).length === 0) {
         return true;
       }
+      
+      // Check if nested data objects differ
+      if (cloudItem.data) {
+        try {
+          if (JSON.stringify(localItem.data) !== JSON.stringify(cloudItem.data)) {
+            return true;
+          }
+        } catch (e) {
+          // Fallback if stringify fails
+        }
+      }
+
       const fieldsToCompare = [
         'date', 'grandTotal', 'paymentStatus', 'paidAmount', 'clientCompany', 
         'docName', 'dcNo', 'invoiceNo', 'billNo', 'driverName', 'companyName', 'name'
