@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
 import { db, saveCustomer, updateCustomer, deleteCustomer } from '../db';
-import { Search, Plus, Edit2, Trash2, Building2, MapPin, Phone, Mail, Globe, Hash, Users, FileText, Printer, X, CheckCircle, Clock } from 'lucide-react';
+import { Search, Plus, Edit2, Trash2, Building2, MapPin, Phone, Mail, Globe, Hash, Users, FileText, Printer, X, CheckCircle, Clock, CalendarCheck, IndianRupee } from 'lucide-react';
 
 export default function Customers() {
   const [customers, setCustomers] = useState([]);
+  // Map of companyName (lowercase) -> { lastBilledDate, totalBilled, docCount }
+  const [customerStats, setCustomerStats] = useState({});
   const [search, setSearch] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -26,8 +28,35 @@ export default function Customers() {
 
   const loadCustomers = async () => {
     try {
-      const all = await db.customers.toArray();
+      const [all, invoices, cashbills] = await Promise.all([
+        db.customers.toArray(),
+        db.invoices.toArray().catch(() => []),
+        db.cashbills.toArray().catch(() => [])
+      ]);
       setCustomers(all || []);
+
+      // Build per-customer stats map
+      const statsMap = {};
+      const allBillingDocs = [
+        ...invoices.map(d => ({ clientCompany: d.clientCompany, date: d.date, grandTotal: Number(d.grandTotal) || 0 })),
+        ...cashbills.map(d => ({ clientCompany: d.clientCompany, date: d.date, grandTotal: Number(d.grandTotal) || 0 }))
+      ];
+      allBillingDocs.forEach(doc => {
+        if (!doc.clientCompany) return;
+        const key = doc.clientCompany.trim().toLowerCase();
+        if (!statsMap[key]) statsMap[key] = { lastBilledDate: null, totalBilled: 0, docCount: 0 };
+        statsMap[key].totalBilled += doc.grandTotal;
+        statsMap[key].docCount += 1;
+        if (doc.date) {
+          const d = new Date(doc.date);
+          if (!isNaN(d.getTime())) {
+            if (!statsMap[key].lastBilledDate || d > statsMap[key].lastBilledDate) {
+              statsMap[key].lastBilledDate = d;
+            }
+          }
+        }
+      });
+      setCustomerStats(statsMap);
     } catch (err) {
       console.error('Failed to load customers:', err);
       setCustomers([]);
@@ -353,31 +382,61 @@ export default function Customers() {
           </div>
         ) : (
           <div className="customer-grid">
-            {filtered.map(c => (
-              <div key={c.id} className="customer-card fade-in">
-                <h3>
-                  <Building2 size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
-                  {c.companyName || c.company_name || 'Unnamed Company'}
-                </h3>
-                {c.gstin && <div className="detail"><Hash size={14} /><span>GSTIN: {c.gstin}</span></div>}
-                {c.address && <div className="detail"><MapPin size={14} /><span>{c.address}</span></div>}
-                {c.mobile && <div className="detail"><Phone size={14} /><span>{c.mobile}</span></div>}
-                {c.email && <div className="detail"><Mail size={14} /><span>{c.email}</span></div>}
-                {c.website && <div className="detail"><Globe size={14} /><span>{c.website}</span></div>}
-                {c.vendorCode && <div className="detail" style={{ color: '#0066cc', fontWeight: 600 }}><Hash size={14} /><span>Vendor Code: {c.vendorCode}</span></div>}
-                <div className="actions" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
-                  <button className="btn btn-sm btn-primary" onClick={() => openLedger(c)} style={{ background: '#0284c7', borderColor: '#0284c7' }}>
-                    <FileText size={14} /> Ledger
-                  </button>
-                  <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(c)}>
-                    <Edit2 size={14} /> Edit
-                  </button>
-                  <button className="btn btn-sm btn-danger" onClick={() => handleDelete(c.id)}>
-                    <Trash2 size={14} /> Delete
-                  </button>
+            {filtered.map(c => {
+              const key = (c.companyName || c.company_name || '').trim().toLowerCase();
+              const cStats = customerStats[key];
+              return (
+                <div key={c.id} className="customer-card fade-in">
+                  <h3>
+                    <Building2 size={16} style={{ display: 'inline', marginRight: '6px', verticalAlign: 'middle' }} />
+                    {c.companyName || c.company_name || 'Unnamed Company'}
+                  </h3>
+                  {c.gstin && <div className="detail"><Hash size={14} /><span>GSTIN: {c.gstin}</span></div>}
+                  {c.address && <div className="detail"><MapPin size={14} /><span>{c.address}</span></div>}
+                  {c.mobile && <div className="detail"><Phone size={14} /><span>{c.mobile}</span></div>}
+                  {c.email && <div className="detail"><Mail size={14} /><span>{c.email}</span></div>}
+                  {c.website && <div className="detail"><Globe size={14} /><span>{c.website}</span></div>}
+                  {c.vendorCode && <div className="detail" style={{ color: '#0066cc', fontWeight: 600 }}><Hash size={14} /><span>Vendor Code: {c.vendorCode}</span></div>}
+
+                  {/* Last Billed Info */}
+                  {cStats ? (
+                    <div style={{ marginTop: '10px', padding: '8px 10px', borderRadius: '8px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.18)', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem' }}>
+                        <CalendarCheck size={13} style={{ color: '#6366f1' }} />
+                        <span style={{ color: 'var(--text-muted)' }}>Last Billed:</span>
+                        <strong style={{ color: 'var(--text-primary)' }}>
+                          {cStats.lastBilledDate ? cStats.lastBilledDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                        </strong>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '0.78rem' }}>
+                        <IndianRupee size={13} style={{ color: '#10b981' }} />
+                        <span style={{ color: 'var(--text-muted)' }}>Total Billed:</span>
+                        <strong style={{ color: '#10b981' }}>
+                          {formatCurrency(cStats.totalBilled)}
+                        </strong>
+                        <span style={{ color: 'var(--text-muted)', fontSize: '0.72rem' }}>({cStats.docCount} doc{cStats.docCount !== 1 ? 's' : ''})</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ marginTop: '10px', padding: '6px 10px', borderRadius: '8px', background: 'rgba(100,116,139,0.06)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      No billing history
+                    </div>
+                  )}
+
+                  <div className="actions" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '12px' }}>
+                    <button className="btn btn-sm btn-primary" onClick={() => openLedger(c)} style={{ background: '#0284c7', borderColor: '#0284c7' }}>
+                      <FileText size={14} /> Ledger
+                    </button>
+                    <button className="btn btn-sm btn-secondary" onClick={() => handleEdit(c)}>
+                      <Edit2 size={14} /> Edit
+                    </button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDelete(c.id)}>
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

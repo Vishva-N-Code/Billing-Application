@@ -106,6 +106,24 @@ function App() {
       }, 50);
     }
     initSync();
+
+    // ── Periodic re-sync every 45 s so changes on one device (e.g. payment
+    //    status toggle) are automatically picked up by all other devices. ──
+    const SYNC_INTERVAL_MS = 45_000;
+    let isSyncing = false;
+    const pollTimer = setInterval(async () => {
+      if (isSyncing || (typeof window !== 'undefined' && !window.navigator.onLine)) return;
+      isSyncing = true;
+      try {
+        await syncFromCloud();
+      } catch (e) {
+        console.warn('[Poll sync] skipped:', e.message);
+      } finally {
+        isSyncing = false;
+      }
+    }, SYNC_INTERVAL_MS);
+
+    return () => clearInterval(pollTimer);
   }, []);
 
   return (
