@@ -12,7 +12,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.101.1",
+    "@libsql/client": "^0.18.0",
+    "@supabase/supabase-js": "^2.117.2",
     "dexie": "^4.3.0",
     "dexie-export-import": "^4.4.0",
     "html2canvas": "^1.4.1",

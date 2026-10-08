@@ -772,7 +772,15 @@ export default function TaxInvoice({ exportItem }) {
               </div>
             </div>
 
-            <ExportButtons targetRef={previewRef} filename={form.docName || `Tax_Invoice_${form.invoiceNo}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
+            <ExportButtons 
+              targetRef={previewRef} 
+              filename={form.docName || `Tax_Invoice_${form.invoiceNo}`} 
+              onExport={handleExport} 
+              onSaveOnly={handleSaveOnly} 
+              clientName={form.billingCompany}
+              clientMobile={form.billingMobile}
+              grandTotal={grandTotal}
+            />
           </div>
 
           {/* === STORAGE === */}

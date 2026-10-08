@@ -392,7 +392,14 @@ export default function CashBill({ exportItem }) {
               )})}
             </div>
           </div>
-          <ExportButtons targetRef={previewRef} filename={form.docName || `Cash_Bill_${form.billNo || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
+          <ExportButtons 
+            targetRef={previewRef} 
+            filename={form.docName || `Cash_Bill_${form.billNo || 'draft'}`} 
+            onExport={handleExport} 
+            onSaveOnly={handleSaveOnly} 
+            clientName={form.clientCompany}
+            grandTotal={grandTotal}
+          />
         </div>
 
           {/* === STORAGE === */}

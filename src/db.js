@@ -452,23 +452,23 @@ function mapFromCloud(data) {
 }
 
 export async function pushToCloud(tableName, data) {
-  // Skip cloud operations if offline to prevent UI hangs and unnecessary errors
   if (typeof window !== 'undefined' && !window.navigator.onLine) {
     console.log(`[Offline] ${tableName} saved locally. Will sync when online.`);
     return;
   }
-
   try {
     const cloudData = mapToCloud(data);
     delete cloudData.id;
-    delete cloudData.originalFileName; // Sanitize missing cloud column
-    
+    delete cloudData.originalFileName;
     const onConflict = TABLE_CONFLICT_COLS[tableName] || 'business_id';
     let { error } = await supabase.from(tableName).upsert({ ...cloudData, business_id: BUSINESS_ID }, { onConflict });
-    
-    // If upsert fails due to statement timeout (57014), fallback to direct check & write
-    if (error && (error.code === '57014' || error.message.includes('timeout'))) {
-      console.warn(`Upsert timeout for ${tableName}. Retrying with direct update/insert...`);
+    const needsFallback = error && (
+      error.code === '57014' || error.code === '23505' ||
+      error.message?.includes('timeout') || error.message?.includes('duplicate key') ||
+      error.message?.includes('unique constraint')
+    );
+    if (needsFallback) {
+      console.warn(`Upsert failed for ${tableName} (${error.code}). Retrying with direct update/insert...`);
       const keyCol = TABLE_CONFLICT_COLS[tableName]?.split(',')[1]?.trim() || 'id';
       const keyValue = cloudData[keyCol];
       if (keyValue) {
@@ -482,21 +482,28 @@ export async function pushToCloud(tableName, data) {
         }
       }
     }
-
     if (error) {
-      // If the error is about a missing column, log it specifically and don't halt
-      if (error.message.includes('column') && error.message.includes('does not exist')) {
+      if (error.message?.includes('column') && error.message?.includes('does not exist')) {
         console.warn(`Cloud sync warning: Column missing in Supabase. (${error.message})`);
-        return; 
+        return;
       }
       console.error(`Sync error (${tableName}):`, error.message);
-      window.dispatchEvent(new CustomEvent('sync-error', { detail: { message: `Sync failed (${tableName}): ${error.message}` } }));
+      // Only show user-facing error if it's a meaningful server error (not a transient network hiccup)
+      const isTransient = error.message?.includes('Failed to fetch') || error.message?.includes('timeout') || error.message?.includes('NetworkError');
+      if (!isTransient) {
+        window.dispatchEvent(new CustomEvent('sync-error', { detail: { message: `Sync failed (${tableName}): ${error.message}` } }));
+      }
     }
   } catch (err) {
-    // Only dispatch error if we are actually online (otherwise it's expected)
     if (typeof window !== 'undefined' && window.navigator.onLine) {
-      console.error(`Supabase push exception (${tableName}):`, err);
-      window.dispatchEvent(new CustomEvent('sync-error', { detail: { message: `Push failed (${tableName}): ${err.message}` } }));
+      // Suppress 'Failed to fetch' — transient network or SW issue, not a real error for the user
+      const isTransient = err.message?.includes('Failed to fetch') || err.message?.includes('NetworkError') || err.message?.includes('timeout');
+      if (!isTransient) {
+        console.error(`Supabase push exception (${tableName}):`, err);
+        window.dispatchEvent(new CustomEvent('sync-error', { detail: { message: `Push failed (${tableName}): ${err.message}` } }));
+      } else {
+        console.warn(`[Sync] Transient network error (${tableName}), will retry:`, err.message);
+      }
     }
   }
 }
@@ -627,27 +634,21 @@ export async function syncFromCloud() {
 
     async function fetchRemoteTable(remote) {
       if (remote === 'quotations') {
-        // Quotations contain heavy embedded base64 signatures that cause statement timeout (code 57014) on single batch select('*').
-        // Fetch IDs first, then batch retrieve in small chunks:
         const { data: metaList, error: metaErr } = await fetchWithRetry(() =>
           supabase.from('quotations').select('id').eq('business_id', BUSINESS_ID)
         );
         if (metaErr || !metaList) return { data: null, error: metaErr };
-        
         const allRecords = [];
-        const chunkSize = 5;
+        const chunkSize = 3;
         for (let i = 0; i < metaList.length; i += chunkSize) {
           const chunkIds = metaList.slice(i, i + chunkSize).map(r => r.id);
           const res = await fetchWithRetry(() =>
-            supabase.from('quotations').select('*').in('id', chunkIds)
+            supabase.from('quotations').select('*').eq('business_id', BUSINESS_ID).in('id', chunkIds)
           );
-          if (res && res.data) {
-            allRecords.push(...res.data);
-          }
+          if (res && res.data) allRecords.push(...res.data);
         }
         return { data: allRecords, error: null };
       }
-
       let res = await fetchWithRetry(() =>
         supabase.from(remote).select('*').eq('business_id', BUSINESS_ID)
       );
@@ -661,7 +662,7 @@ export async function syncFromCloud() {
           for (let i = 0; i < metaList.length; i += 10) {
             const chunkIds = metaList.slice(i, i + 10).map(r => r.id);
             const chunkRes = await fetchWithRetry(() =>
-              supabase.from(remote).select('*').in('id', chunkIds)
+              supabase.from(remote).select('*').eq('business_id', BUSINESS_ID).in('id', chunkIds)
             );
             if (chunkRes && chunkRes.data) allRecords.push(...chunkRes.data);
           }
@@ -770,7 +771,13 @@ export async function syncFromCloud() {
 
     const { data: setts } = settsResult;
     if (setts && setts.length > 0) {
-      await Promise.all(setts.map(s => db.settings.put({ key: s.key, value: s.value })));
+      await Promise.all(setts.map(s => {
+        let val = s.value;
+        if (typeof val === 'string') {
+          try { val = JSON.parse(val); } catch (e) { console.error('Parse err:', e); }
+        }
+        return db.settings.put({ key: s.key, value: val });
+      }));
     }
 
     console.log('--- Sync system STANDBY ---');
@@ -1012,13 +1019,49 @@ export async function updatePaymentStatus(id, type, paidAmount, status) {
   const numericId = Number(id);
   const table = type === 'invoice' ? db.invoices : db.cashbills;
   const remoteTable = type === 'invoice' ? 'invoices' : 'cashbills';
-  
+  const keyCol = type === 'invoice' ? 'invoice_no' : 'bill_no';
+  const localKeyField = type === 'invoice' ? 'invoiceNo' : 'billNo';
+
+  // 1. Update local IndexedDB
   await table.update(numericId, { paidAmount, paymentStatus: status });
   notifyLocalChange();
-  const updatedItem = await table.get(numericId);
-  if (updatedItem) pushToCloud(remoteTable, updatedItem);
+
+  // 2. Push ONLY the lightweight payment fields to Supabase (avoids timeout from pushing
+  //    the full record which contains large base64 data blobs).
+  if (typeof window !== 'undefined' && !window.navigator.onLine) return;
+  try {
+    const updatedItem = await table.get(numericId);
+    if (!updatedItem || !updatedItem[localKeyField]) return;
+
+    const { error } = await supabase
+      .from(remoteTable)
+      .update({ payment_status: status, paid_amount: paidAmount })
+      .eq('business_id', BUSINESS_ID)
+      .eq(keyCol, updatedItem[localKeyField]);
+    if (error) {
+      console.warn(`[Payment sync] Direct update failed (${error.message}), falling back to full push...`);
+      pushToCloud(remoteTable, updatedItem);
+    } else {
+      console.log(`[Payment sync] Payment status synced for ${remoteTable} ${updatedItem[localKeyField]}`);
+    }
+  } catch (err) {
+    console.error('[Payment sync] Exception:', err);
+    if (typeof window !== 'undefined' && window.navigator.onLine) {
+      window.dispatchEvent(new CustomEvent('sync-error', { detail: { message: `Payment sync failed: ${err.message}` } }));
+    }
+  }
 }
 
-export async function getCompanyProfile() { const p = await db.settings.get('companyProfile'); return p ? p.value : COMPANY; }
+export async function getCompanyProfile() {
+  const p = await db.settings.get('companyProfile');
+  if (!p) return COMPANY;
+  let val = p.value;
+  if (typeof val === 'string') {
+    try { val = JSON.parse(val); } catch (e) { return COMPANY; }
+    // Fix the stale string in Dexie for future reads
+    await db.settings.put({ key: 'companyProfile', value: val });
+  }
+  return val;
+}
 export async function updateCompanyProfile(data) { await db.settings.put({ key: 'companyProfile', value: data }); pushToCloud('settings', { key: 'companyProfile', value: data }); }
 

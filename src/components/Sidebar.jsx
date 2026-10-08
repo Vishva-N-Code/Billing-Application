@@ -66,9 +66,18 @@ export default function Sidebar() {
   }, [isCollapsed]);
 
   useEffect(() => {
-    const handleError = (e) => setSyncError(e.detail.message);
+    let dismissTimer = null;
+    const handleError = (e) => {
+      setSyncError(e.detail.message);
+      clearTimeout(dismissTimer);
+      // Auto-dismiss after 8 seconds
+      dismissTimer = setTimeout(() => setSyncError(null), 8000);
+    };
     window.addEventListener('sync-error', handleError);
-    return () => window.removeEventListener('sync-error', handleError);
+    return () => {
+      window.removeEventListener('sync-error', handleError);
+      clearTimeout(dismissTimer);
+    };
   }, []);
 
   const switchModule = (mod) => {

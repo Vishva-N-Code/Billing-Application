@@ -695,7 +695,14 @@ export default function ProformaInvoice({ exportItem }) {
               </div>
             </div>
           </div>
-          <ExportButtons targetRef={previewRef} filename={form.docName || `Proforma_Invoice_${form.invoiceNo || form.clientCompany || 'draft'}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
+          <ExportButtons 
+            targetRef={previewRef} 
+            filename={form.docName || `Proforma_Invoice_${form.invoiceNo || form.clientCompany || 'draft'}`} 
+            onExport={handleExport} 
+            onSaveOnly={handleSaveOnly} 
+            clientName={form.clientCompany}
+            grandTotal={grandTotal}
+          />
         </div>
 
         {/* === STORAGE === */}

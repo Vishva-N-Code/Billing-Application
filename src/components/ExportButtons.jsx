@@ -185,7 +185,6 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
         await navigator.share({ files: [file], title: cleanName });
-        if (onExport) onExport();
         return;
       } catch (err) {
         if (err.name === 'AbortError') return;
@@ -202,8 +201,6 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
     document.body.appendChild(a);
     a.click();
     setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-    
-    if (onExport) onExport();
     
     const clientHeader = clientName ? `Client: *${clientName}*\n` : '';
     const totalHeader = grandTotal ? `Total Amount: *₹${grandTotal.toLocaleString('en-IN')}*\n` : '';
@@ -242,6 +239,9 @@ export default function ExportButtons({ targetRef, filename = 'document', onExpo
 
       if (blob) {
          setReadyShare({ format, blob });
+         if (onExport) {
+           await onExport();
+         }
       }
     } catch (e) {
       console.error('Share preparation failed', e);

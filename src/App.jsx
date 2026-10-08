@@ -124,47 +124,24 @@ function App() {
     }, SYNC_INTERVAL_MS);
 
     // ── Supabase Realtime: instantly sync when ANY device updates records ──
-    // When Device A updates a payment status, Supabase broadcasts the change.
-    // All other open devices receive it here and trigger a local sync immediately.
     let realtimeSyncTimeout = null;
     const realtimeChannel = supabase
       .channel(`realtime-billing-${BUSINESS_ID}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'invoices',
-          filter: `business_id=eq.${BUSINESS_ID}`,
-        },
-        () => {
-          // Debounce: avoid multiple rapid syncs if several rows change at once
-          clearTimeout(realtimeSyncTimeout);
-          realtimeSyncTimeout = setTimeout(() => {
-            console.log('[Realtime] Invoice change detected — syncing...');
-            syncFromCloud().catch(e => console.warn('[Realtime sync] skipped:', e.message));
-          }, 500);
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'cashbills',
-          filter: `business_id=eq.${BUSINESS_ID}`,
-        },
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: `business_id=eq.${BUSINESS_ID}` },
         () => {
           clearTimeout(realtimeSyncTimeout);
           realtimeSyncTimeout = setTimeout(() => {
-            console.log('[Realtime] Cash Bill change detected — syncing...');
             syncFromCloud().catch(e => console.warn('[Realtime sync] skipped:', e.message));
           }, 500);
-        }
-      )
-      .subscribe((status) => {
-        console.log('[Realtime] Channel status:', status);
-      });
+        })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cashbills', filter: `business_id=eq.${BUSINESS_ID}` },
+        () => {
+          clearTimeout(realtimeSyncTimeout);
+          realtimeSyncTimeout = setTimeout(() => {
+            syncFromCloud().catch(e => console.warn('[Realtime sync] skipped:', e.message));
+          }, 500);
+        })
+      .subscribe();
 
     return () => {
       clearInterval(pollTimer);

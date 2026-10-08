@@ -20,6 +20,14 @@ export default defineConfig({
         skipWaiting: true,
         clientsClaim: true,
         maximumFileSizeToCacheInBytes: 100 * 1024 * 1024, // 100 MB (for full offline seed data including all quotations)
+        // Never let the service worker cache or intercept Supabase API calls
+        navigateFallbackDenylist: [/^\/rest\/v1/, /supabase\.co/],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
+            handler: 'NetworkOnly', // Always go direct to network for Supabase
+          },
+        ],
       },
       devOptions: {
         enabled: false,

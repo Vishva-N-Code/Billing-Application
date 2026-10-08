@@ -659,7 +659,14 @@ export default function Quotation({ exportItem }) {
               </div>
             </div>
 
-            <ExportButtons targetRef={previewRef} filename={form.docName || "Quotation"} onExport={handleExport} onSaveOnly={handleSaveOnly} />
+            <ExportButtons 
+              targetRef={previewRef} 
+              filename={form.docName || "Quotation"} 
+              onExport={handleExport} 
+              onSaveOnly={handleSaveOnly} 
+              clientName={form.toCompany || form.clientCompany}
+              grandTotal={totalAmount}
+            />
           </div>
 
           {/* === STORAGE === */}

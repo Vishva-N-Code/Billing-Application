@@ -704,7 +704,13 @@ export default function DeliveryChellan({ exportItem }) {
                 </div>
               </div>
             </div>
-            <ExportButtons targetRef={previewRef} filename={form.docName || `Delivery_Challan_${form.dcNo}`} onExport={handleExport} onSaveOnly={handleSaveOnly} />
+            <ExportButtons 
+              targetRef={previewRef} 
+              filename={form.docName || `Delivery_Challan_${form.dcNo}`} 
+              onExport={handleExport} 
+              onSaveOnly={handleSaveOnly} 
+              clientName={form.toName}
+            />
           </div>
 
           {/* === STORAGE === */}
