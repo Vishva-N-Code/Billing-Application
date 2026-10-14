@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, db, saveQuotation, deleteQuotation, updateQuotation, getCompanyProfile, initSettings } from '../db';
+import { COMPANY, db, saveQuotation, deleteQuotation, updateQuotation, getCompanyProfile, initSettings, getFullDocument } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 import CustomDateInput from '../components/CustomDateInput';
@@ -76,12 +76,19 @@ export default function Quotation({ exportItem }) {
 
   useEffect(() => {
     const init = async () => {
-      const itemToLoad = exportItem || location.state?.loadItem;
-      if (itemToLoad) {
-        const q = itemToLoad;
-        setForm({ ...q.data.form, id: q.id });
-        setItems(q.data.items);
-        if (q.data.signature) setSignature(q.data.signature);
+      const rawItem = exportItem || location.state?.loadItem;
+      if (rawItem) {
+        const q = await getFullDocument('quotation', rawItem);
+        const formPayload = q?.data?.form || {
+          id: q?.id,
+          docName: q?.docName || '',
+          date: q?.date || '',
+          toCompany: q?.clientCompany || q?.toCompany || '',
+          toAddress: q?.toAddress || ''
+        };
+        setForm({ ...formPayload, id: q?.id });
+        setItems(q?.data?.items || [{ description: q?.docName || 'Crane Service', capacity: '', rate: '', unitType: 'shifts', perUnit: '' }]);
+        if (q?.data?.signature) setSignature(q.data.signature);
         setActiveTab('preview');
         
         const profile = await getCompanyProfile();

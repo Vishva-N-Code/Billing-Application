@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2, ExternalLink } from 'lucide-react';
-import { COMPANY, getNextDcNumber, updateDcCounter, initSettings, saveDc, deleteDc, updateDc, getAllVehicleSections, getCompanyProfile } from '../db';
+import { COMPANY, getNextDcNumber, updateDcCounter, initSettings, saveDc, deleteDc, updateDc, getAllVehicleSections, getCompanyProfile, getFullDocument } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 import CustomDateInput from '../components/CustomDateInput';
@@ -172,14 +172,23 @@ export default function DeliveryChellan({ exportItem }) {
 
   useEffect(() => {
     const init = async () => {
-      const itemToLoad = exportItem || location.state?.loadItem;
-      if (itemToLoad) {
-        const dc = itemToLoad;
-        if (dc.data.form) {
+      const rawItem = exportItem || location.state?.loadItem;
+      if (rawItem) {
+        const dc = await getFullDocument('dc', rawItem);
+        if (dc?.data?.form) {
           setForm({ ...dc.data.form, id: dc.id });
           if (dc.data.signature) setSignature(dc.data.signature);
-        } else {
+        } else if (dc?.data) {
           setForm({ ...dc.data, id: dc.id });
+        } else if (dc) {
+          setForm(f => ({
+            ...f,
+            id: dc.id,
+            dcNo: dc.dcNo || f.dcNo,
+            docName: dc.docName || '',
+            date: dc.date || f.date,
+            toName: dc.clientCompany || ''
+          }));
         }
         setActiveTab('preview');
         

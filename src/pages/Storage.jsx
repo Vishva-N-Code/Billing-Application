@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db, deleteInvoice, deleteQuotation, deleteProformaInvoice, deleteCashBill, deleteDc, updatePaymentStatus, deleteExperienceCertificate } from '../db';
+import { db, deleteInvoice, deleteQuotation, deleteProformaInvoice, deleteCashBill, deleteDc, updatePaymentStatus, deleteExperienceCertificate, getFullDocument } from '../db';
 import { Trash2, ExternalLink, Search, Download, Loader2, FolderOpen, Coins, CheckCircle, AlertCircle, Clock, X } from 'lucide-react';
 import TaxInvoice from './TaxInvoice';
 import Quotation from './Quotation';
@@ -145,8 +145,18 @@ export default function Storage() {
     if (type === 'experience') await deleteExperienceCertificate(id);
   };
 
-  const handleOpen = (path, item) => {
-    navigate(path, { state: { loadItem: item } });
+  const handleOpen = async (path, item, type) => {
+    // Determine type identifier
+    const docType = type || (
+      path.includes('tax-invoice') ? 'invoice' :
+      path.includes('cash-bill') ? 'cashbill' :
+      path.includes('quotation') ? 'quotation' :
+      path.includes('delivery-chellan') ? 'dc' :
+      path.includes('proforma-invoice') ? 'proforma' :
+      path.includes('experience-certificate') ? 'experience' : 'invoice'
+    );
+    const fullItem = await getFullDocument(docType, item);
+    navigate(path, { state: { loadItem: fullItem || item } });
   };
 
   const handleToggleSelectId = (id, type) => {

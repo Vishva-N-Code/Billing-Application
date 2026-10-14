@@ -59,10 +59,22 @@ vi.mock('./supabase', () => {
   const mockDelete = vi.fn();
   const mockMatch = vi.fn();
   const mockUpsert = vi.fn();
+  const mockUpdate = vi.fn();
+  const mockEq = vi.fn();
+  const mockSelect = vi.fn();
+
+  const eqChain = {
+    eq: mockEq,
+    select: mockSelect,
+  };
+  mockEq.mockReturnValue(eqChain);
+  mockUpdate.mockReturnValue({ eq: mockEq });
+  mockSelect.mockResolvedValue({ data: [{ id: 1 }], error: null });
 
   mockFrom.mockReturnValue({
     upsert: mockUpsert,
     delete: mockDelete,
+    update: mockUpdate,
   });
 
   mockDelete.mockReturnValue({
@@ -81,7 +93,7 @@ vi.mock('./supabase', () => {
 });
 
 // Import db and supabase
-import { db, getNextInvoiceNumber, updateInvoiceCounter, getNextDcNumber, updateDcCounter, getNextProformaInvoiceNumber, pushToCloud, removeFromCloud } from './db';
+import { db, getNextInvoiceNumber, updateInvoiceCounter, getNextDcNumber, updateDcCounter, getNextProformaInvoiceNumber, pushToCloud, removeFromCloud, updatePaymentStatus, applyRealtimeBillingUpdate, getFullDocument } from './db';
 import { supabase, BUSINESS_ID } from './supabase';
 
 describe('Database and Sync Operations', () => {
@@ -238,6 +250,74 @@ describe('Database and Sync Operations', () => {
       });
 
       Object.defineProperty(window.navigator, 'onLine', { value: originalOnLine, configurable: true });
+    });
+
+    it('updatePaymentStatus should update IndexedDB and push payment fields to Supabase', async () => {
+      const originalOnLine = window.navigator.onLine;
+      Object.defineProperty(window.navigator, 'onLine', { value: true, configurable: true });
+
+      db.invoices.get.mockResolvedValue({ id: 1, invoiceNo: '073', grandTotal: 5310 });
+      db.invoices.update.mockResolvedValue(1);
+
+      await updatePaymentStatus(1, 'invoice', 5310, 'paid');
+
+      expect(db.invoices.update).toHaveBeenCalledWith(1, { paidAmount: 5310, paymentStatus: 'paid' });
+      expect(supabase.from).toHaveBeenCalledWith('invoices');
+
+      Object.defineProperty(window.navigator, 'onLine', { value: originalOnLine, configurable: true });
+    });
+
+    it('applyRealtimeBillingUpdate should find target invoice by normalized number and update Dexie immediately', async () => {
+      db.invoices.toArray.mockResolvedValue([
+        { id: 42, invoiceNo: '073', paymentStatus: 'unpaid', paidAmount: 0 }
+      ]);
+      db.invoices.update.mockResolvedValue(1);
+
+      const result = await applyRealtimeBillingUpdate('invoices', {
+        invoice_no: '73',
+        payment_status: 'paid',
+        paid_amount: 5310,
+        grand_total: 5310
+      });
+
+      expect(result).toBe(true);
+      expect(db.invoices.update).toHaveBeenCalledWith(42, expect.objectContaining({
+        paymentStatus: 'paid',
+        paidAmount: 5310
+      }));
+    });
+
+    it('getFullDocument should return existing document if valid data already exists', async () => {
+      const docWithData = {
+        id: 10,
+        invoiceNo: '085',
+        data: {
+          form: { billingCompany: 'Test Corp', invoiceNo: '085' },
+          items: [{ description: 'Crane Rental', amount: 5000 }]
+        }
+      };
+      db.invoices.get.mockResolvedValue(docWithData);
+
+      const res = await getFullDocument('invoice', docWithData);
+      expect(res.data.form.billingCompany).toBe('Test Corp');
+      expect(res.data.items.length).toBe(1);
+    });
+
+    it('getFullDocument should fallback gracefully if data is missing', async () => {
+      const docWithoutData = {
+        id: 11,
+        invoiceNo: '099',
+        clientCompany: 'ABC Logistics',
+        grandTotal: 12000
+      };
+      db.invoices.get.mockResolvedValue(docWithoutData);
+
+      const res = await getFullDocument('invoice', docWithoutData);
+      expect(res).toBeDefined();
+      expect(res.data).toBeDefined();
+      expect(res.data.form).toBeDefined();
+      expect(res.data.form.billingCompany).toBe('ABC Logistics');
+      expect(res.data.items.length).toBeGreaterThan(0);
     });
   });
 });

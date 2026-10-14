@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { COMPANY, getCompanyProfile, getNextCashBillNumber, updateCashBillCounter, initSettings, saveCashBill, deleteCashBill, updateCashBill, db } from '../db';
+import { COMPANY, getCompanyProfile, getNextCashBillNumber, updateCashBillCounter, initSettings, saveCashBill, deleteCashBill, updateCashBill, db, getFullDocument } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 import CustomDateInput from '../components/CustomDateInput';
@@ -35,12 +35,26 @@ export default function CashBill({ exportItem }) {
 
   useEffect(() => {
     const init = async () => {
-      const itemToLoad = exportItem || location.state?.loadItem;
-      if (itemToLoad) {
-        const bill = itemToLoad;
-        setForm({ ...bill.data.form, id: bill.id });
-        setItems(bill.data.items);
-        if (bill.data.signature) setSignature(bill.data.signature);
+      const rawItem = exportItem || location.state?.loadItem;
+      if (rawItem) {
+        const bill = await getFullDocument('cashbill', rawItem);
+        const formPayload = bill?.data?.form || {
+          id: bill?.id,
+          billNo: bill?.billNo || '',
+          date: bill?.date || '',
+          clientCompany: bill?.clientCompany || '',
+          docName: bill?.docName || '',
+          grandTotal: bill?.grandTotal || 0
+        };
+        setForm({ ...formPayload, id: bill?.id });
+        setItems(bill?.data?.items || (bill?.grandTotal ? [{
+          date: bill?.date || '',
+          description: bill?.docName || 'Crane Service Charges',
+          quantity: 1,
+          rate: bill?.grandTotal,
+          amount: bill?.grandTotal
+        }] : [{ date: '', description: '', quantity: '', rate: '', amount: '' }]));
+        if (bill?.data?.signature) setSignature(bill.data.signature);
         setActiveTab('preview');
         
         const profile = await getCompanyProfile();

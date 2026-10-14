@@ -17,7 +17,7 @@ import Dashboard from './pages/Dashboard';
 import Reports from './pages/Reports';
 import ExperienceCertificate from './pages/ExperienceCertificate';
 import UpdatePrompt from './components/UpdatePrompt';
-import { syncFromCloud, initSettings } from './db';
+import { syncFromCloud, initSettings, applyRealtimeBillingUpdate } from './db';
 import { supabase, BUSINESS_ID } from './supabase';
 import './index.css';
 
@@ -125,22 +125,27 @@ function App() {
 
     // ── Supabase Realtime: instantly sync when ANY device updates records ──
     let realtimeSyncTimeout = null;
+    const handleRealtimeChange = async (payload) => {
+      let handledLocally = false;
+      try {
+        if (payload?.new && (payload.table === 'invoices' || payload.table === 'cashbills')) {
+          handledLocally = await applyRealtimeBillingUpdate(payload.table, payload.new);
+        }
+      } catch (err) {
+        console.warn('[Realtime sync] Error handling payload:', err);
+      }
+      
+      // Debounce background cloud sync as safety net
+      clearTimeout(realtimeSyncTimeout);
+      realtimeSyncTimeout = setTimeout(() => {
+        syncFromCloud().catch(e => console.warn('[Realtime sync] skipped:', e.message));
+      }, handledLocally ? 2500 : 300);
+    };
+
     const realtimeChannel = supabase
       .channel(`realtime-billing-${BUSINESS_ID}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: `business_id=eq.${BUSINESS_ID}` },
-        () => {
-          clearTimeout(realtimeSyncTimeout);
-          realtimeSyncTimeout = setTimeout(() => {
-            syncFromCloud().catch(e => console.warn('[Realtime sync] skipped:', e.message));
-          }, 500);
-        })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'cashbills', filter: `business_id=eq.${BUSINESS_ID}` },
-        () => {
-          clearTimeout(realtimeSyncTimeout);
-          realtimeSyncTimeout = setTimeout(() => {
-            syncFromCloud().catch(e => console.warn('[Realtime sync] skipped:', e.message));
-          }, 500);
-        })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'invoices', filter: `business_id=eq.${BUSINESS_ID}` }, handleRealtimeChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'cashbills', filter: `business_id=eq.${BUSINESS_ID}` }, handleRealtimeChange)
       .subscribe();
 
     return () => {

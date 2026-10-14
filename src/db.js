@@ -632,25 +632,22 @@ export async function syncFromCloud() {
       return false;
     };
 
+    const TABLE_METADATA_COLS = {
+      invoices: 'id, invoice_no, doc_name, date, client_company, grand_total, payment_status, paid_amount, created_at',
+      cashbills: 'id, bill_no, doc_name, date, client_company, grand_total, payment_status, paid_amount, created_at',
+      delivery_chellans: 'id, dc_no, doc_name, date, client_company, created_at',
+      quotations: 'id, doc_name, date, client_company, created_at',
+      proforma_invoices: 'id, invoice_no, doc_name, date, client_company, grand_total, created_at',
+      media_library: 'id, name, type, category, uploaded_at',
+      customers: '*',
+      experience_certificates: '*',
+      settings: '*'
+    };
+
     async function fetchRemoteTable(remote) {
-      if (remote === 'quotations') {
-        const { data: metaList, error: metaErr } = await fetchWithRetry(() =>
-          supabase.from('quotations').select('id').eq('business_id', BUSINESS_ID)
-        );
-        if (metaErr || !metaList) return { data: null, error: metaErr };
-        const allRecords = [];
-        const chunkSize = 3;
-        for (let i = 0; i < metaList.length; i += chunkSize) {
-          const chunkIds = metaList.slice(i, i + chunkSize).map(r => r.id);
-          const res = await fetchWithRetry(() =>
-            supabase.from('quotations').select('*').eq('business_id', BUSINESS_ID).in('id', chunkIds)
-          );
-          if (res && res.data) allRecords.push(...res.data);
-        }
-        return { data: allRecords, error: null };
-      }
+      const selectCols = TABLE_METADATA_COLS[remote] || '*';
       let res = await fetchWithRetry(() =>
-        supabase.from(remote).select('*').eq('business_id', BUSINESS_ID)
+        supabase.from(remote).select(selectCols).eq('business_id', BUSINESS_ID)
       );
       if (res.error && (res.error.code === '57014' || res.error.message?.includes('timeout'))) {
         console.warn(`[Sync] Timeout fetching ${remote}, retrying in chunks...`);
@@ -662,7 +659,7 @@ export async function syncFromCloud() {
           for (let i = 0; i < metaList.length; i += 10) {
             const chunkIds = metaList.slice(i, i + 10).map(r => r.id);
             const chunkRes = await fetchWithRetry(() =>
-              supabase.from(remote).select('*').eq('business_id', BUSINESS_ID).in('id', chunkIds)
+              supabase.from(remote).select(selectCols).eq('business_id', BUSINESS_ID).in('id', chunkIds)
             );
             if (chunkRes && chunkRes.data) allRecords.push(...chunkRes.data);
           }
@@ -720,6 +717,7 @@ export async function syncFromCloud() {
         const localMap = seenKeys;
         const itemsToPut = [];
         const itemsToAdd = [];
+        const missingIdsToFetch = [];
         
         if (remoteRecords && remoteRecords.length > 0) {
           for (const remoteItem of remoteRecords) {
@@ -729,10 +727,36 @@ export async function syncFromCloud() {
               const exists = localMap.get(keyValue);
               if (exists) {
                 if (shouldUpdateLocal(exists, cloudItem)) {
-                  itemsToPut.push({ ...exists, ...cloudItem, id: exists.id });
+                  // Merge updated metadata (payment status, amounts, date), preserving existing local data blob
+                  const mergedData = (cloudItem.data && Object.keys(cloudItem.data).length > 0)
+                    ? cloudItem.data
+                    : exists.data;
+                  itemsToPut.push({ ...exists, ...cloudItem, id: exists.id, data: mergedData });
                 }
               } else {
-                const { id, ...newItem } = cloudItem;
+                // Completely new document from cloud
+                if (!cloudItem.data && remoteItem.id && mapping.remote !== 'customers' && mapping.remote !== 'settings') {
+                  missingIdsToFetch.push(remoteItem.id);
+                } else {
+                  const { id, ...newItem } = cloudItem;
+                  itemsToAdd.push(newItem);
+                }
+              }
+            }
+          }
+        }
+
+        // Fetch full records (with data) only for genuinely new items missing local data
+        if (missingIdsToFetch.length > 0) {
+          for (let i = 0; i < missingIdsToFetch.length; i += 5) {
+            const chunkIds = missingIdsToFetch.slice(i, i + 5);
+            const chunkRes = await fetchWithRetry(() =>
+              supabase.from(mapping.remote).select('*').eq('business_id', BUSINESS_ID).in('id', chunkIds)
+            );
+            if (chunkRes && chunkRes.data) {
+              for (const r of chunkRes.data) {
+                const cloudFull = mapFromCloud(r);
+                const { id, ...newItem } = cloudFull;
                 itemsToAdd.push(newItem);
               }
             }
@@ -822,12 +846,14 @@ export async function saveInvoice(data) {
 
 export async function updateInvoice(id, data) {
   const numericId = Number(id);
+  const existing = await db.invoices.get(numericId);
+  const merged = { ...existing, ...data };
   await db.invoices.update(numericId, data);
   if (data && data.invoiceNo) {
     await updateInvoiceCounter(data.invoiceNo);
   }
   notifyLocalChange();
-  pushToCloud('invoices', data);
+  pushToCloud('invoices', merged);
 }
 export async function deleteInvoice(id) {
   const numericId = Number(id);
@@ -846,9 +872,11 @@ export async function saveCashBill(data) {
 }
 export async function updateCashBill(id, data) { 
   const numericId = Number(id); 
+  const existing = await db.cashbills.get(numericId);
+  const merged = { ...existing, ...data };
   await db.cashbills.update(numericId, data); 
   notifyLocalChange();
-  pushToCloud('cashbills', data); 
+  pushToCloud('cashbills', merged); 
 }
 export async function deleteCashBill(id) {
   const numericId = Number(id);
@@ -1026,23 +1054,45 @@ export async function updatePaymentStatus(id, type, paidAmount, status) {
   await table.update(numericId, { paidAmount, paymentStatus: status });
   notifyLocalChange();
 
-  // 2. Push ONLY the lightweight payment fields to Supabase (avoids timeout from pushing
-  //    the full record which contains large base64 data blobs).
+  // 2. Push to Supabase with robust key matching
   if (typeof window !== 'undefined' && !window.navigator.onLine) return;
   try {
     const updatedItem = await table.get(numericId);
     if (!updatedItem || !updatedItem[localKeyField]) return;
 
-    const { error } = await supabase
+    const rawVal = updatedItem[localKeyField];
+    const strVal = String(rawVal).trim();
+    const numVal = parseInt(strVal, 10);
+    const paddedVal = !isNaN(numVal) ? String(numVal).padStart(3, '0') : strVal;
+    const unpaddedVal = !isNaN(numVal) ? String(numVal) : strVal;
+
+    // Direct update with .select('id') to confirm rows actually matched!
+    let { data: updatedRows, error } = await supabase
       .from(remoteTable)
       .update({ payment_status: status, paid_amount: paidAmount })
       .eq('business_id', BUSINESS_ID)
-      .eq(keyCol, updatedItem[localKeyField]);
-    if (error) {
-      console.warn(`[Payment sync] Direct update failed (${error.message}), falling back to full push...`);
-      pushToCloud(remoteTable, updatedItem);
+      .eq(keyCol, strVal)
+      .select('id');
+
+    // If 0 rows updated and it's a numeric key, try padded or unpadded key
+    if (!error && (!updatedRows || updatedRows.length === 0) && !isNaN(numVal)) {
+      const altKey = strVal === paddedVal ? unpaddedVal : paddedVal;
+      const res = await supabase
+        .from(remoteTable)
+        .update({ payment_status: status, paid_amount: paidAmount })
+        .eq('business_id', BUSINESS_ID)
+        .eq(keyCol, altKey)
+        .select('id');
+      updatedRows = res.data;
+      error = res.error;
+    }
+
+    // Fall back to full pushToCloud if no rows matched or error occurred
+    if (error || !updatedRows || updatedRows.length === 0) {
+      console.warn(`[Payment sync] Direct update matched 0 rows, pushing to cloud...`);
+      await pushToCloud(remoteTable, updatedItem);
     } else {
-      console.log(`[Payment sync] Payment status synced for ${remoteTable} ${updatedItem[localKeyField]}`);
+      console.log(`[Payment sync] Payment status synced for ${remoteTable} ${strVal} (${status})`);
     }
   } catch (err) {
     console.error('[Payment sync] Exception:', err);
@@ -1050,6 +1100,45 @@ export async function updatePaymentStatus(id, type, paidAmount, status) {
       window.dispatchEvent(new CustomEvent('sync-error', { detail: { message: `Payment sync failed: ${err.message}` } }));
     }
   }
+}
+
+/**
+ * Instantly applies a realtime billing change (from Supabase Realtime) directly to IndexedDB.
+ * Returns true if the target item was found and updated locally, false otherwise.
+ */
+export async function applyRealtimeBillingUpdate(tableName, record) {
+  if (!record) return false;
+  try {
+    const isInvoice = tableName === 'invoices';
+    const isCashbill = tableName === 'cashbills';
+    if (!isInvoice && !isCashbill) return false;
+
+    const table = isInvoice ? db.invoices : db.cashbills;
+    const keyField = isInvoice ? 'invoiceNo' : 'billNo';
+    const remoteKey = isInvoice ? record.invoice_no : record.bill_no;
+    if (!remoteKey) return false;
+
+    const allItems = await table.toArray();
+    const target = allItems.find(item => normKey(item[keyField]) === normKey(remoteKey));
+
+    if (target) {
+      const updates = {};
+      if (record.payment_status !== undefined) updates.paymentStatus = record.payment_status;
+      if (record.paid_amount !== undefined) updates.paidAmount = Number(record.paid_amount) || 0;
+      if (record.grand_total !== undefined) updates.grandTotal = Number(record.grand_total) || 0;
+      if (record.date !== undefined) updates.date = record.date;
+      if (record.client_company !== undefined) updates.clientCompany = record.client_company;
+      if (record.doc_name !== undefined) updates.docName = record.doc_name;
+
+      await table.update(target.id, updates);
+      notifyLocalChange();
+      console.log(`[Realtime sync] Instantly applied payment update for ${tableName} ${remoteKey} (${updates.paymentStatus || ''})`);
+      return true;
+    }
+  } catch (err) {
+    console.warn(`[Realtime sync] Failed to apply instant update for ${tableName}:`, err);
+  }
+  return false;
 }
 
 export async function getCompanyProfile() {
@@ -1064,4 +1153,168 @@ export async function getCompanyProfile() {
   return val;
 }
 export async function updateCompanyProfile(data) { await db.settings.put({ key: 'companyProfile', value: data }); pushToCloud('settings', { key: 'companyProfile', value: data }); }
+
+/**
+ * Ensures a document record has its complete `data` field (containing form, items, signature).
+ * If the local record in Dexie is missing or only has metadata, it fetches the full record
+ * from Supabase on-demand, updates Dexie so future reads are instantaneous, and returns
+ * the complete document.
+ */
+export async function getFullDocument(typeOrTable, docOrId) {
+  if (!docOrId) return null;
+
+  const typeTableConfig = {
+    invoice: { table: db.invoices, remote: 'invoices', keyCol: 'invoice_no', localKey: 'invoiceNo' },
+    invoices: { table: db.invoices, remote: 'invoices', keyCol: 'invoice_no', localKey: 'invoiceNo' },
+    'Tax Invoice': { table: db.invoices, remote: 'invoices', keyCol: 'invoice_no', localKey: 'invoiceNo' },
+
+    cashbill: { table: db.cashbills, remote: 'cashbills', keyCol: 'bill_no', localKey: 'billNo' },
+    cashbills: { table: db.cashbills, remote: 'cashbills', keyCol: 'bill_no', localKey: 'billNo' },
+    'Cash Bill': { table: db.cashbills, remote: 'cashbills', keyCol: 'bill_no', localKey: 'billNo' },
+
+    quotation: { table: db.quotations, remote: 'quotations', keyCol: 'doc_name', localKey: 'docName' },
+    quotations: { table: db.quotations, remote: 'quotations', keyCol: 'doc_name', localKey: 'docName' },
+    'Quotation': { table: db.quotations, remote: 'quotations', keyCol: 'doc_name', localKey: 'docName' },
+
+    dc: { table: db.deliveryChellans, remote: 'delivery_chellans', keyCol: 'dc_no', localKey: 'dcNo' },
+    deliveryChellans: { table: db.deliveryChellans, remote: 'delivery_chellans', keyCol: 'dc_no', localKey: 'dcNo' },
+    'Delivery Chellan': { table: db.deliveryChellans, remote: 'delivery_chellans', keyCol: 'dc_no', localKey: 'dcNo' },
+
+    proforma: { table: db.proformaInvoices, remote: 'proforma_invoices', keyCol: 'invoice_no', localKey: 'invoiceNo' },
+    proformaInvoices: { table: db.proformaInvoices, remote: 'proforma_invoices', keyCol: 'invoice_no', localKey: 'invoiceNo' },
+    'Proforma Invoice': { table: db.proformaInvoices, remote: 'proforma_invoices', keyCol: 'invoice_no', localKey: 'invoiceNo' },
+
+    experience: { table: db.experienceCertificates, remote: 'experience_certificates', keyCol: 'doc_name', localKey: 'docName' },
+    experienceCertificates: { table: db.experienceCertificates, remote: 'experience_certificates', keyCol: 'doc_name', localKey: 'docName' },
+    'Experience Certificate': { table: db.experienceCertificates, remote: 'experience_certificates', keyCol: 'doc_name', localKey: 'docName' }
+  };
+
+  const cfg = typeTableConfig[typeOrTable];
+  if (!cfg) return docOrId;
+
+  let localDoc = null;
+  const isDocObject = typeof docOrId === 'object' && docOrId !== null;
+
+  if (isDocObject && docOrId.id) {
+    localDoc = await cfg.table.get(docOrId.id);
+  } else if (!isDocObject) {
+    localDoc = await cfg.table.get(docOrId);
+  }
+
+  // Fallback to the object passed in if not found by id in Dexie
+  let currentDoc = localDoc || (isDocObject ? docOrId : null);
+
+  // Check if current document already has valid, non-empty data
+  const hasValidData = currentDoc && currentDoc.data && typeof currentDoc.data === 'object' && (
+    (currentDoc.data.form && Object.keys(currentDoc.data.form).length > 0) ||
+    (Array.isArray(currentDoc.data.items) && currentDoc.data.items.length > 0) ||
+    (currentDoc.data.deliveryType !== undefined)
+  );
+
+  if (hasValidData) {
+    return currentDoc;
+  }
+
+  // If local data is missing or empty, fetch the full record from Supabase
+  try {
+    const keyVal = currentDoc ? (currentDoc[cfg.localKey] || currentDoc.docName || currentDoc.id) : docOrId;
+    if (keyVal) {
+      let query = supabase.from(cfg.remote).select('*').eq('business_id', BUSINESS_ID);
+      
+      // Try by key column first (e.g. invoice_no, bill_no, dc_no, doc_name)
+      let { data, error } = await query.eq(cfg.keyCol, keyVal).limit(1);
+      
+      // If not found and keyVal is numeric or has leading zeros, try zero-padded / unpadded variants
+      if ((!data || data.length === 0) && /^\d+$/.test(String(keyVal).trim())) {
+        const numInt = parseInt(String(keyVal).trim(), 10);
+        const padded = String(numInt).padStart(3, '0');
+        const unpadded = String(numInt);
+        const { data: altData } = await supabase.from(cfg.remote).select('*')
+          .eq('business_id', BUSINESS_ID)
+          .in(cfg.keyCol, [padded, unpadded, `OSC${String(numInt).padStart(4, '0')}`])
+          .limit(1);
+        data = altData;
+      }
+
+      // If still not found and currentDoc has cloud ID, try querying by ID
+      if ((!data || data.length === 0) && currentDoc?.id && typeof currentDoc.id === 'number') {
+        const { data: idData } = await supabase.from(cfg.remote).select('*')
+          .eq('business_id', BUSINESS_ID)
+          .eq('id', currentDoc.id)
+          .limit(1);
+        data = idData;
+      }
+
+      if (data && data.length > 0 && data[0].data) {
+        const cloudRecord = mapFromCloud(data[0]);
+        const fullDoc = {
+          ...(currentDoc || {}),
+          ...cloudRecord,
+          id: currentDoc?.id || cloudRecord.id,
+          data: cloudRecord.data
+        };
+        // Cache full document into Dexie permanently so future opens are instant
+        try {
+          if (fullDoc.id) {
+            await cfg.table.put(fullDoc);
+          }
+        } catch (dexieErr) {
+          console.warn(`[getFullDocument] Failed to cache full doc to Dexie:`, dexieErr);
+        }
+        return fullDoc;
+      }
+    }
+  } catch (cloudErr) {
+    console.warn(`[getFullDocument] Could not fetch full document from cloud:`, cloudErr);
+  }
+
+  // Synthesize a minimal fallback data object if neither local nor cloud had data
+  // so that the editor does not crash on undefined inv.data.form
+  if (currentDoc) {
+    if (!currentDoc.data) {
+      currentDoc = {
+        ...currentDoc,
+        data: {
+          form: {
+            id: currentDoc.id,
+            invoiceNo: currentDoc.invoiceNo || currentDoc.billNo || currentDoc.dcNo || '',
+            date: currentDoc.date || '',
+            billingCompany: currentDoc.clientCompany || '',
+            toCompany: currentDoc.clientCompany || '',
+            docName: currentDoc.docName || '',
+            grandTotal: currentDoc.grandTotal || 0
+          },
+          items: currentDoc.grandTotal ? [{
+            description: currentDoc.docName || 'Crane Service Charges',
+            amount: currentDoc.grandTotal,
+            rate: currentDoc.grandTotal,
+            quantity: 1,
+            unitType: 'shifts'
+          }] : []
+        }
+      };
+    } else if (!currentDoc.data.form) {
+      currentDoc.data.form = {
+        id: currentDoc.id,
+        invoiceNo: currentDoc.invoiceNo || currentDoc.billNo || currentDoc.dcNo || '',
+        date: currentDoc.date || '',
+        billingCompany: currentDoc.clientCompany || '',
+        toCompany: currentDoc.clientCompany || '',
+        docName: currentDoc.docName || '',
+        grandTotal: currentDoc.grandTotal || 0
+      };
+    }
+    if (!currentDoc.data.items) {
+      currentDoc.data.items = currentDoc.grandTotal ? [{
+        description: currentDoc.docName || 'Crane Service Charges',
+        amount: currentDoc.grandTotal,
+        rate: currentDoc.grandTotal,
+        quantity: 1,
+        unitType: 'shifts'
+      }] : [];
+    }
+  }
+
+  return currentDoc;
+}
 

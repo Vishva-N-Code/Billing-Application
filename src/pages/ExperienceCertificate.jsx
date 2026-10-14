@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Award, Trash2 } from 'lucide-react';
-import { COMPANY, getCompanyProfile, initSettings, saveExperienceCertificate, deleteExperienceCertificate, updateExperienceCertificate, db } from '../db';
+import { COMPANY, getCompanyProfile, initSettings, saveExperienceCertificate, deleteExperienceCertificate, updateExperienceCertificate, db, getFullDocument } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 import CustomDateInput from '../components/CustomDateInput';
@@ -36,11 +36,19 @@ export default function ExperienceCertificate({ exportItem }) {
 
   useEffect(() => {
     const init = async () => {
-      const itemToLoad = exportItem || location.state?.loadItem;
-      if (itemToLoad) {
-        const cert = itemToLoad;
-        setForm({ ...cert.data.form, id: cert.id });
-        if (cert.data.signature) setSignature(cert.data.signature);
+      const rawItem = exportItem || location.state?.loadItem;
+      if (rawItem) {
+        const cert = await getFullDocument('experience', rawItem);
+        const formPayload = cert?.data?.form || {
+          id: cert?.id,
+          docName: cert?.docName || '',
+          driverName: cert?.driverName || '',
+          fatherName: cert?.fatherName || '',
+          dlNo: cert?.dlNo || '',
+          designation: 'CRANE OPERATOR'
+        };
+        setForm({ ...formPayload, id: cert?.id });
+        if (cert?.data?.signature) setSignature(cert.data.signature);
         setActiveTab('preview');
         
         const profile = await getCompanyProfile();

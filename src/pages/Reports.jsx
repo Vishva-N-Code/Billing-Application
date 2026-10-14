@@ -38,6 +38,10 @@ export default function Reports() {
       setCompanyProfile(profile);
     };
     init();
+    window.addEventListener('sync-complete', init);
+    return () => {
+      window.removeEventListener('sync-complete', init);
+    };
   }, []);
 
   const formatCurrency = (val) => {

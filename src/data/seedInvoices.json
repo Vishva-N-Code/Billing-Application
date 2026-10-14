@@ -183,8 +183,8 @@
       "date": "2026-09-02",
       "clientCompany": "LAKSHMI AAC BLOCKS",
       "grandTotal": 106200,
-      "paymentStatus": "unpaid",
-      "paidAmount": 0,
+      "paymentStatus": "paid",
+      "paidAmount": 106200,
       "created_at": "2026-09-02T02:27:07.2578+00:00"
     },
     {
@@ -194,8 +194,8 @@
       "date": "2026-09-09",
       "clientCompany": "TATA STEEL COLORS PVT LTD",
       "grandTotal": 61360,
-      "paymentStatus": "unpaid",
-      "paidAmount": 0,
+      "paymentStatus": "paid",
+      "paidAmount": 61360,
       "created_at": "2026-09-11T09:55:30.865029+00:00"
     },
     {
@@ -348,8 +348,8 @@
       "date": "2026-09-01",
       "clientCompany": "FUSO GLASS INDIA PVT LTD",
       "grandTotal": 27376,
-      "paymentStatus": "unpaid",
-      "paidAmount": 0,
+      "paymentStatus": "paid",
+      "paidAmount": 27376,
       "created_at": "2026-09-11T09:58:10.404776+00:00"
     },
     {
@@ -359,8 +359,8 @@
       "date": "2026-09-03",
       "clientCompany": "FUSO GLASS INDIA PVT LTD",
       "grandTotal": 38468,
-      "paymentStatus": "unpaid",
-      "paidAmount": 0,
+      "paymentStatus": "paid",
+      "paidAmount": 38468,
       "created_at": "2026-09-11T09:59:38.771712+00:00"
     },
     {
@@ -601,8 +601,8 @@
       "date": "2026-09-08",
       "clientCompany": "FUSO GLASS INDIA PVT LTD",
       "grandTotal": 55814,
-      "paymentStatus": "unpaid",
-      "paidAmount": 0,
+      "paymentStatus": "paid",
+      "paidAmount": 55814,
       "created_at": "2026-09-11T10:53:32.767512+00:00"
     },
     {

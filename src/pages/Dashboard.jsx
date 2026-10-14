@@ -11,7 +11,7 @@ import {
   FileText, CheckCircle2, CircleDashed, ChevronRight, Layers, Eye, Sparkles,
   Search, X
 } from 'lucide-react';
-import { db } from '../db';
+import { db, updatePaymentStatus, getFullDocument } from '../db';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -64,6 +64,21 @@ export default function Dashboard() {
       window.removeEventListener('sync-complete', handleSyncComplete);
     };
   }, [selectedYear]);
+
+  const handleTogglePayment = async (e, doc) => {
+    e.stopPropagation();
+    try {
+      const isInvoice = doc.type === 'Tax Invoice' || !!doc.invoiceNo;
+      const type = isInvoice ? 'invoice' : 'cashbill';
+      const currentStatus = doc.paymentStatus || 'unpaid';
+      const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid';
+      const newAmount = newStatus === 'paid' ? (Number(doc.grandTotal) || 0) : 0;
+      await updatePaymentStatus(doc.id, type, newAmount, newStatus);
+      await fetchDashboardData(false);
+    } catch (err) {
+      console.error('Failed to toggle payment status:', err);
+    }
+  };
 
   const fetchDashboardData = async (showLoadingSpinner = false) => {
     if (isFetchingRef.current) return;
@@ -342,9 +357,10 @@ export default function Dashboard() {
     setShowSearchResults(false);
   };
 
-  const openDoc = (doc) => {
+  const openDoc = async (doc) => {
     clearSearch();
-    navigate(doc.routePath, { state: { loadItem: doc.loadItem } });
+    const fullItem = await getFullDocument(doc.type || 'invoice', doc.loadItem || doc);
+    navigate(doc.routePath, { state: { loadItem: fullItem || doc.loadItem || doc } });
   };
 
   const DOC_TYPE_COLORS = {
@@ -726,7 +742,12 @@ export default function Dashboard() {
                       </td>
                       <td className="date-cell">{formatDate(doc.date)}</td>
                       <td>
-                        <span className={`status-pill ${doc.paymentStatus === 'paid' ? 'paid' : 'unpaid'}`}>
+                        <span 
+                          className={`status-pill ${doc.paymentStatus === 'paid' ? 'paid' : 'unpaid'}`}
+                          onClick={(e) => handleTogglePayment(e, doc)}
+                          title="Click to toggle Paid/Unpaid"
+                          style={{ cursor: 'pointer', userSelect: 'none' }}
+                        >
                           {doc.paymentStatus === 'paid' ? 'Paid' : 'Unpaid'}
                         </span>
                       </td>
@@ -737,7 +758,7 @@ export default function Dashboard() {
                         <button 
                           className="btn-icon-action" 
                           title="Open Document"
-                          onClick={() => navigate(doc.routePath, { state: { loadItem: doc } })}
+                          onClick={() => openDoc({ ...doc, loadItem: doc })}
                         >
                           <Eye size={15} />
                         </button>

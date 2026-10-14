@@ -9,7 +9,8 @@ import {
   saveProformaInvoice, 
   deleteProformaInvoice, 
   updateProformaInvoice, 
-  db 
+  db,
+  getFullDocument 
 } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
@@ -49,17 +50,23 @@ export default function ProformaInvoice({ exportItem }) {
 
   useEffect(() => {
     const init = async () => {
-      const itemToLoad = exportItem || location.state?.loadItem;
-      if (itemToLoad) {
-        const pf = itemToLoad;
-        const loadedForm = pf.data?.form || {};
+      const rawItem = exportItem || location.state?.loadItem;
+      if (rawItem) {
+        const pf = await getFullDocument('proforma', rawItem);
+        const loadedForm = pf?.data?.form || {
+          id: pf?.id,
+          invoiceNo: pf?.invoiceNo || '',
+          date: pf?.date || '',
+          billingCompany: pf?.clientCompany || '',
+          grandTotal: pf?.grandTotal || 0
+        };
         const hasPartyInItems = loadedForm.configs?.some(c => c.items?.some(i => i.party && i.party.trim().length > 0));
         setForm({
           ...loadedForm,
-          id: pf.id,
+          id: pf?.id,
           showParty: loadedForm.showParty !== undefined ? loadedForm.showParty : (hasPartyInItems || false)
         });
-        if (pf.data?.signature) setSignature(pf.data.signature);
+        if (pf?.data?.signature) setSignature(pf.data.signature);
         setActiveTab('preview');
         
         const profile = await getCompanyProfile();

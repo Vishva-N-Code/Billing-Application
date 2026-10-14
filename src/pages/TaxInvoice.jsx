@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { Plus, Trash2 } from 'lucide-react';
-import { db, COMPANY, getCompanyProfile, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveInvoice, updateInvoice, deleteInvoice, saveCustomer } from '../db';
+import { db, COMPANY, getCompanyProfile, getNextInvoiceNumber, updateInvoiceCounter, initSettings, saveInvoice, updateInvoice, deleteInvoice, saveCustomer, getFullDocument } from '../db';
 import SignatureUpload from '../components/SignatureUpload';
 import ExportButtons from '../components/ExportButtons';
 import CustomDateInput from '../components/CustomDateInput';
@@ -95,14 +95,27 @@ export default function TaxInvoice({ exportItem }) {
 
   useEffect(() => {
     const init = async () => {
-      const itemToLoad = exportItem || location.state?.loadItem;
+      const rawItem = exportItem || location.state?.loadItem;
       
-      if (itemToLoad) {
-        // Load data immediately for export
-        const inv = itemToLoad;
-        setForm({ ...inv.data.form, id: inv.id });
-        setItems(inv.data.items);
-        if (inv.data.signature) setSignature(inv.data.signature);
+      if (rawItem) {
+        // Load complete data including form, items, signature
+        const inv = await getFullDocument('invoice', rawItem);
+        const formPayload = inv?.data?.form || {
+          id: inv?.id,
+          invoiceNo: inv?.invoiceNo || '',
+          date: inv?.date || '',
+          billingCompany: inv?.clientCompany || '',
+          grandTotal: inv?.grandTotal || 0
+        };
+        setForm({ ...formPayload, id: inv?.id });
+        setItems(inv?.data?.items || (inv?.grandTotal ? [{
+          description: inv?.docName || 'Crane Service Charges',
+          amount: inv?.grandTotal,
+          rate: inv?.grandTotal,
+          quantity: 1,
+          unitType: 'shifts'
+        }] : [{ description: '', rate: '', unitType: 'shifts', quantity: '', amount: '' }]));
+        if (inv?.data?.signature) setSignature(inv.data.signature);
         setActiveTab('preview');
         
         // Parallel load essential company profile
