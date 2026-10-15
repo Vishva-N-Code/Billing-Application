@@ -108,10 +108,13 @@ function App() {
     }
     initSync();
 
-    // ── Periodic re-sync every 45 s (fallback safety net) ──
-    const SYNC_INTERVAL_MS = 45_000;
+    // ── Periodic re-sync every 5 mins (fallback safety net) ──
+    // Checks document.hidden so it NEVER fires when the tab/window is minimized or idle
+    const SYNC_INTERVAL_MS = 300_000; // 5 minutes (reduced from aggressive 45s)
     let isSyncing = false;
-    const pollTimer = setInterval(async () => {
+
+    const performSync = async () => {
+      if (document.hidden) return; // Completely freeze requests when user is not viewing the screen
       if (isSyncing || (typeof window !== 'undefined' && !window.navigator.onLine)) return;
       isSyncing = true;
       try {
@@ -121,7 +124,17 @@ function App() {
       } finally {
         isSyncing = false;
       }
-    }, SYNC_INTERVAL_MS);
+    };
+
+    const pollTimer = setInterval(performSync, SYNC_INTERVAL_MS);
+
+    // When the user switches back to the tab, perform a sync immediately
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        performSync();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     // ── Supabase Realtime: instantly sync when ANY device updates records ──
     let realtimeSyncTimeout = null;
@@ -151,6 +164,7 @@ function App() {
     return () => {
       clearInterval(pollTimer);
       clearTimeout(realtimeSyncTimeout);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
       supabase.removeChannel(realtimeChannel);
     };
   }, []);
