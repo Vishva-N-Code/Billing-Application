@@ -639,9 +639,10 @@ export async function syncFromCloud() {
       quotations: 'id, doc_name, date, client_company, created_at',
       proforma_invoices: 'id, invoice_no, doc_name, date, client_company, grand_total, created_at',
       media_library: 'id, name, type, category, uploaded_at',
-      customers: '*',
-      experience_certificates: '*',
-      settings: '*'
+      // Lightweight metadata only — data blobs fetched on-demand for new records only
+      customers: 'id, company_name, contact_name, phone, email, address, business_id, created_at',
+      experience_certificates: 'id, doc_name, date, client_company, business_id, created_at',
+      settings: 'id, business_id, business_name, address, phone, email, gstin, created_at'
     };
 
     async function fetchRemoteTable(remote) {
