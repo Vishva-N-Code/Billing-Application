@@ -640,7 +640,7 @@ export async function syncFromCloud() {
       proforma_invoices: 'id, invoice_no, doc_name, date, client_company, grand_total, created_at',
       media_library: 'id, name, type, category, uploaded_at',
       // Lightweight metadata only — data blobs fetched on-demand for new records only
-      customers: 'id, company_name, contact_name, phone, email, address, business_id, created_at',
+      customers: 'id, company_name, gstin, address, mobile, email, website, vendor_code, business_id, created_at',
       experience_certificates: 'id, doc_name, date, client_company, business_id, created_at',
       settings: 'id, business_id, business_name, address, phone, email, gstin, created_at'
     };
@@ -1269,22 +1269,51 @@ export async function getFullDocument(typeOrTable, docOrId) {
     console.warn(`[getFullDocument] Could not fetch full document from cloud:`, cloudErr);
   }
 
-  // Synthesize a minimal fallback data object if neither local nor cloud had data
-  // so that the editor does not crash on undefined inv.data.form
+  // Synthesize a fallback data object if neither local nor cloud had data
+  // so that the editor does not crash on undefined inv.data.form and populates customer details
   if (currentDoc) {
+    // Find customer details from local DB to enrich missing address, gstin, mobile
+    let customerInfo = null;
+    const targetCompany = (currentDoc.clientCompany || currentDoc.companyName || currentDoc.data?.form?.billingCompany || '').trim().toLowerCase();
+    if (targetCompany) {
+      try {
+        const allCust = await db.customers?.toArray?.();
+        if (Array.isArray(allCust)) {
+          customerInfo = allCust.find(c => {
+            const cName = (c.companyName || c.company_name || '').trim().toLowerCase();
+            return cName && (cName === targetCompany || targetCompany.includes(cName) || cName.includes(targetCompany));
+          });
+        }
+      } catch (err) {
+        console.warn('[getFullDocument] Customer lookup error:', err);
+      }
+    }
+
+    const fallbackForm = {
+      id: currentDoc.id,
+      invoiceNo: currentDoc.invoiceNo || currentDoc.billNo || currentDoc.dcNo || '',
+      date: currentDoc.date || '',
+      billingCompany: currentDoc.clientCompany || customerInfo?.companyName || customerInfo?.company_name || '',
+      toCompany: currentDoc.clientCompany || customerInfo?.companyName || customerInfo?.company_name || '',
+      toName: currentDoc.clientCompany || customerInfo?.companyName || customerInfo?.company_name || '',
+      billingAddress: customerInfo?.address || '',
+      toAddress: customerInfo?.address || '',
+      billingGstin: customerInfo?.gstin || '',
+      billingMobile: customerInfo?.mobile || '',
+      billingWebsite: customerInfo?.website || '',
+      vendorCode: customerInfo?.vendorCode || customerInfo?.vendor_code || '',
+      docName: currentDoc.docName || '',
+      grandTotal: currentDoc.grandTotal || 0,
+      gstType: 'cgst_sgst',
+      hsnCode: '996719',
+      vehicles: [{ type: 'Forklift', capacity: '5 Ton', regNo: '', value: '' }]
+    };
+
     if (!currentDoc.data) {
       currentDoc = {
         ...currentDoc,
         data: {
-          form: {
-            id: currentDoc.id,
-            invoiceNo: currentDoc.invoiceNo || currentDoc.billNo || currentDoc.dcNo || '',
-            date: currentDoc.date || '',
-            billingCompany: currentDoc.clientCompany || '',
-            toCompany: currentDoc.clientCompany || '',
-            docName: currentDoc.docName || '',
-            grandTotal: currentDoc.grandTotal || 0
-          },
+          form: fallbackForm,
           items: currentDoc.grandTotal ? [{
             description: currentDoc.docName || 'Crane Service Charges',
             amount: currentDoc.grandTotal,
@@ -1295,15 +1324,26 @@ export async function getFullDocument(typeOrTable, docOrId) {
         }
       };
     } else if (!currentDoc.data.form) {
-      currentDoc.data.form = {
-        id: currentDoc.id,
-        invoiceNo: currentDoc.invoiceNo || currentDoc.billNo || currentDoc.dcNo || '',
-        date: currentDoc.date || '',
-        billingCompany: currentDoc.clientCompany || '',
-        toCompany: currentDoc.clientCompany || '',
-        docName: currentDoc.docName || '',
-        grandTotal: currentDoc.grandTotal || 0
-      };
+      currentDoc.data.form = fallbackForm;
+    } else {
+      // If form exists but has empty address/gstin, enrich from customer profile
+      if (customerInfo) {
+        if (!currentDoc.data.form.billingAddress && customerInfo.address) {
+          currentDoc.data.form.billingAddress = customerInfo.address;
+        }
+        if (!currentDoc.data.form.toAddress && customerInfo.address) {
+          currentDoc.data.form.toAddress = customerInfo.address;
+        }
+        if (!currentDoc.data.form.billingGstin && customerInfo.gstin) {
+          currentDoc.data.form.billingGstin = customerInfo.gstin;
+        }
+        if (!currentDoc.data.form.billingMobile && customerInfo.mobile) {
+          currentDoc.data.form.billingMobile = customerInfo.mobile;
+        }
+        if (!currentDoc.data.form.vendorCode && (customerInfo.vendorCode || customerInfo.vendor_code)) {
+          currentDoc.data.form.vendorCode = customerInfo.vendorCode || customerInfo.vendor_code;
+        }
+      }
     }
     if (!currentDoc.data.items) {
       currentDoc.data.items = currentDoc.grandTotal ? [{
